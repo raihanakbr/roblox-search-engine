@@ -7,7 +7,13 @@ logger = logging.getLogger(__name__)
 
 class ElasticsearchManager:
     def __init__(self, host="http://localhost:9200"):
-        self.es = Elasticsearch(host)
+        # Configuration for Elasticsearch 8.x
+        self.es = Elasticsearch(
+            hosts=[host],
+            verify_certs=False,
+            ssl_show_warn=False,
+            request_timeout=30
+        )
         self.index_name = "roblox_games"
         
     def check_connection(self):
@@ -121,45 +127,74 @@ class ElasticsearchManager:
         - size: Number of results to return
         - from_: Offset for pagination
         """
-        # Base query using multi_match for text search
         query = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "multi_match": {
-                                "query": query_text,
-                                "fields": ["name^3", "description^2", "creator.name", "genre"],
-                                "type": "best_fields",
-                                "fuzziness": "AUTO"
+                "query": {
+                    "function_score": {
+                        "query": {
+                            "bool": {
+                                "must": [
+                                    {
+                                        "multi_match": {
+                                            "query": query_text,
+                                            "fields": ["name^3", "description^2", "creator.name", "genre"],
+                                            "type": "best_fields",
+                                            "fuzziness": "AUTO"
+                                        }
+                                    }
+                                ],
+                                "filter": []
                             }
-                        }
-                    ],
-                    "filter": []
+                        },
+                        "functions": [
+                            {
+                                "field_value_factor": {
+                                    "field": "visits",
+                                    "factor": 0.005,
+                                    "modifier": "log1p",
+                                    "missing": 1
+                                },
+                                "weight": 0.3
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "playing",
+                                    "factor": 0.01,
+                                    "modifier": "log1p",
+                                    "missing": 1
+                                },
+                                "weight": 0.5
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "favoritedCount",
+                                    "factor": 0.01,
+                                    "modifier": "log1p",
+                                    "missing": 1
+                                },
+                                "weight": 0.2
+                            }
+                        ],
+                        "score_mode": "sum",
+                        "boost_mode": "multiply"
+                    }
+                },
+                "size": size,
+                "from": from_,
+                "highlight": {
+                    "fields": {
+                        "name": {},
+                        "description": {}
+                    }
                 }
-            },
-            "size": size,
-            "from": from_,
-            "highlight": {
-                "fields": {
-                    "name": {},
-                    "description": {}
-                }
-            },
-            "sort": [
-                "_score",
-                {"visits": {"order": "desc"}},
-                {"playing": {"order": "desc"}}
-            ]
-        }
-        
-        # Add filters if provided
+            }
+            
+            # Add filters if provided
         if filters:
             for field, value in filters.items():
                 if isinstance(value, list):
-                    query["query"]["bool"]["filter"].append({"terms": {field: value}})
+                    query["query"]["function_score"]["query"]["bool"]["filter"].append({"terms": {field: value}})
                 else:
-                    query["query"]["bool"]["filter"].append({"term": {field: value}})
+                    query["query"]["function_score"]["query"]["bool"]["filter"].append({"term": {field: value}})
         
         try:
             results = self.es.search(index=self.index_name, body=query)

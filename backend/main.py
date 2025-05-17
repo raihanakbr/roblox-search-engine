@@ -1,15 +1,15 @@
-from fastapi import FastAPI, HTTPException, Query, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
-import os
-import logging
 import json
+import logging
+import os
+from typing import Any, Dict, List, Optional
 
 from elasticsearch_utils import ElasticsearchManager
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from llm_integration import LLMService
+from pydantic import BaseModel
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -81,7 +81,21 @@ async def search(
     
     # Convert the Elasticsearch response to a dictionary
     search_dict = dict(search_results)
-    
+    if "hits" in search_dict and "hits" in search_dict["hits"]:
+        seen_ids = set()
+        unique_hits = []
+        
+        for hit in search_dict["hits"]["hits"]:
+            game_id = hit["_source"].get("id")
+            if game_id and game_id not in seen_ids:
+                seen_ids.add(game_id)
+                unique_hits.append(hit)
+        
+        # Update hits with deduplicated results
+        search_dict["hits"]["hits"] = unique_hits
+        search_dict["hits"]["total"]["value"] = len(unique_hits)
+    print("ato gay")
+    print(search_dict)
     # Check if we should enhance with LLM
     if request.use_llm and search_dict.get("hits", {}).get("hits", []):
         try:
@@ -92,6 +106,7 @@ async def search(
             
             # Now we can safely add to the dictionary
             search_dict["llm_enhancements"] = llm_enhancements
+
         except Exception as e:
             logger.error(f"LLM enhancement failed: {e}")
             search_dict["llm_enhancements"] = {
@@ -135,6 +150,7 @@ async def initialize_data(es: ElasticsearchManager = Depends(get_es_manager)):
 
 if __name__ == "__main__":
     import uvicorn
+
     # Create index and load data if needed
     if es_manager.check_connection() and not es_manager.es.indices.exists(index=es_manager.index_name):
         es_manager.create_index()

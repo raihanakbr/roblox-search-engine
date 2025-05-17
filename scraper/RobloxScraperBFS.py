@@ -5,9 +5,9 @@ from datetime import datetime
 from collections import deque
 
 # Konfigurasi
-INITIAL_GAME_ID = '7614141751'
-TARGET_GAME_COUNT = 10
-DELAY_SECONDS = 0.5
+INITIAL_GAME_ID = '7018190066'
+TARGET_GAME_COUNT = 1000
+DELAY_SECONDS = 0.1
 OUTPUT_FILE = './data/roblox_games_gg.json'
 
 # Menyimpan data
@@ -100,7 +100,7 @@ def main():
     game_queue.append(INITIAL_GAME_ID)
     collected_games[INITIAL_GAME_ID] = None  # Tandai untuk diambil detailnya nanti
     
-    batch_size = 10  # Ukuran batch untuk mengambil detail game
+    batch_size = 32  # Ukuran batch untuk mengambil detail game
     pending_details = [INITIAL_GAME_ID]  # IDs yang perlu diambil detailnya
     
     while game_queue and len(collected_games) < TARGET_GAME_COUNT:

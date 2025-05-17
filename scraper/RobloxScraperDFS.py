@@ -4,9 +4,9 @@ import time
 from datetime import datetime
 
 # Konfigurasi
-INITIAL_GAME_ID = '7614141751'
+INITIAL_GAME_ID = '7018190066'
 TARGET_GAME_COUNT = 100
-DELAY_SECONDS = 1  # Delay antara API calls untuk menghindari rate limiting
+DELAY_SECONDS = 0.1  # Delay antara API calls untuk menghindari rate limiting
 
 # Untuk melacak progress
 collected_games = {}
