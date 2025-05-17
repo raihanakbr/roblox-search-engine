@@ -1,0 +1,3 @@
+# Run pipeline at 2 minutes past every hour
+30 20 * * * /app/run_pipeline.sh >> /var/log/cron.log 2>&1
+# Empty line at the end is required

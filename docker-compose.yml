@@ -21,6 +21,42 @@ services:
       timeout: 10s
       retries: 5
 
+  api:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+    container_name: rofind-api
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    networks:
+      - elastic
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  scheduler:
+    build:
+      context: ./scheduler
+      dockerfile: Dockerfile
+    container_name: rofind-scheduler
+    volumes:
+      - ./scraper:/app/scraper
+      - ./backend:/app/backend
+      - ./data:/app/data
+    networks:
+      - elastic
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+    depends_on:
+      - elasticsearch
+      - api
 networks:
   elastic:
     driver: bridge

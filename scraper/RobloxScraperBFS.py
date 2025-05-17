@@ -6,7 +6,7 @@ from collections import deque
 
 # Konfigurasi
 INITIAL_GAME_ID = '7018190066'
-TARGET_GAME_COUNT = 1000
+TARGET_GAME_COUNT = 10000
 DELAY_SECONDS = 0.1
 OUTPUT_FILE = './data/roblox_games_gg.json'
 
@@ -91,85 +91,90 @@ def fetch_and_process_recommendations():
 
 # Fungsi utama untuk scraping
 def main():
-    print('Memulai Roblox game scraper (versi dioptimalkan)...')
-    print(f"Target: {TARGET_GAME_COUNT} game dimulai dari ID {INITIAL_GAME_ID}")
-    
-    start_time = datetime.now()
-    
-    # Mulai dengan game awal
-    game_queue.append(INITIAL_GAME_ID)
-    collected_games[INITIAL_GAME_ID] = None  # Tandai untuk diambil detailnya nanti
-    
-    batch_size = 32  # Ukuran batch untuk mengambil detail game
-    pending_details = [INITIAL_GAME_ID]  # IDs yang perlu diambil detailnya
-    
-    while game_queue and len(collected_games) < TARGET_GAME_COUNT:
-        # Ambil rekomendasi dari game berikutnya dalam queue
-        new_game_ids = fetch_and_process_recommendations()
+    try:
+        print('Memulai Roblox game scraper (versi dioptimalkan)...')
+        print(f"Target: {TARGET_GAME_COUNT} game dimulai dari ID {INITIAL_GAME_ID}")
         
-        # Tambahkan game baru ke daftar yang perlu diambil detailnya
-        for game_id in new_game_ids:
-            if game_id not in collected_games and len(collected_games) < TARGET_GAME_COUNT:
-                collected_games[game_id] = None  # Placeholder sampai kita mendapatkan detailnya
-                pending_details.append(game_id)
+        start_time = datetime.now()
         
-        # Jika ada cukup game untuk batch atau sudah mencapai target,
-        # ambil detail dari batch game
-        if len(pending_details) >= batch_size or (len(collected_games) >= TARGET_GAME_COUNT and pending_details):
+        # Mulai dengan game awal
+        game_queue.append(INITIAL_GAME_ID)
+        collected_games[INITIAL_GAME_ID] = None  # Tandai untuk diambil detailnya nanti
+        
+        batch_size = 32  # Ukuran batch untuk mengambil detail game
+        pending_details = [INITIAL_GAME_ID]  # IDs yang perlu diambil detailnya
+        
+        while game_queue and len(collected_games) < TARGET_GAME_COUNT:
+            # Ambil rekomendasi dari game berikutnya dalam queue
+            new_game_ids = fetch_and_process_recommendations()
+            
+            # Tambahkan game baru ke daftar yang perlu diambil detailnya
+            for game_id in new_game_ids:
+                if game_id not in collected_games and len(collected_games) < TARGET_GAME_COUNT:
+                    collected_games[game_id] = None  # Placeholder sampai kita mendapatkan detailnya
+                    pending_details.append(game_id)
+            
+            # Jika ada cukup game untuk batch atau sudah mencapai target,
+            # ambil detail dari batch game
+            if len(pending_details) >= batch_size or (len(collected_games) >= TARGET_GAME_COUNT and pending_details):
+                batch_ids = pending_details[:batch_size]
+                pending_details = pending_details[batch_size:]
+                
+                print(f"Mengambil detail untuk {len(batch_ids)} game...")
+                game_details = fetch_games_details(batch_ids)
+                
+                # Update koleksi dengan detail
+                for game_id, details in game_details.items():
+                    if game_id in collected_games:
+                        collected_games[game_id] = details
+                        print(f"Menambahkan game: {details.get('name', 'Unknown')}")
+                
+                # Delay untuk menghindari rate limiting
+                time.sleep(DELAY_SECONDS)
+            
+            print(f"Queue: {len(game_queue)}, Terkumpul: {len(collected_games)}/{TARGET_GAME_COUNT}, Pending details: {len(pending_details)}")
+        
+        # Ambil detail untuk semua game yang tersisa
+        while pending_details:
             batch_ids = pending_details[:batch_size]
             pending_details = pending_details[batch_size:]
             
-            print(f"Mengambil detail untuk {len(batch_ids)} game...")
+            print(f"Mengambil detail final untuk {len(batch_ids)} game...")
             game_details = fetch_games_details(batch_ids)
             
-            # Update koleksi dengan detail
             for game_id, details in game_details.items():
                 if game_id in collected_games:
                     collected_games[game_id] = details
                     print(f"Menambahkan game: {details.get('name', 'Unknown')}")
             
-            # Delay untuk menghindari rate limiting
             time.sleep(DELAY_SECONDS)
         
-        print(f"Queue: {len(game_queue)}, Terkumpul: {len(collected_games)}/{TARGET_GAME_COUNT}, Pending details: {len(pending_details)}")
-    
-    # Ambil detail untuk semua game yang tersisa
-    while pending_details:
-        batch_ids = pending_details[:batch_size]
-        pending_details = pending_details[batch_size:]
+        # Hitung durasi
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
         
-        print(f"Mengambil detail final untuk {len(batch_ids)} game...")
-        game_details = fetch_games_details(batch_ids)
+        # Filter out games with no details
+        valid_games = {id: details for id, details in collected_games.items() if details is not None}
+        games_list = list(valid_games.values())
         
-        for game_id, details in game_details.items():
-            if game_id in collected_games:
-                collected_games[game_id] = details
-                print(f"Menambahkan game: {details.get('name', 'Unknown')}")
+        print(f"\nPengumpulan selesai! {len(games_list)} game valid terkumpul dari {len(collected_games)} ID.")
+        print(f"Waktu yang dibutuhkan: {duration:.2f} detik")
         
-        time.sleep(DELAY_SECONDS)
-    
-    # Hitung durasi
-    end_time = datetime.now()
-    duration = (end_time - start_time).total_seconds()
-    
-    # Filter out games with no details
-    valid_games = {id: details for id, details in collected_games.items() if details is not None}
-    games_list = list(valid_games.values())
-    
-    print(f"\nPengumpulan selesai! {len(games_list)} game valid terkumpul dari {len(collected_games)} ID.")
-    print(f"Waktu yang dibutuhkan: {duration:.2f} detik")
-    
-    # Simpan ke file
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        json.dump(games_list, f, indent=2, ensure_ascii=False)
-    
-    print(f'Hasil disimpan ke {OUTPUT_FILE}')
-    
-    # Statistik dasar
-    if games_list:
-        total_plays = sum(game.get('visits', 0) for game in games_list)
-        avg_plays = round(total_plays / len(games_list))
-        print(f"Rata-rata kunjungan per game: {avg_plays:,}")
-
+        # Simpan ke file
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            json.dump(games_list, f, indent=2, ensure_ascii=False)
+        
+        print(f'Hasil disimpan ke {OUTPUT_FILE}')
+        
+        # Statistik dasar
+        if games_list:
+            total_plays = sum(game.get('visits', 0) for game in games_list)
+            avg_plays = round(total_plays / len(games_list))
+            print(f"Rata-rata kunjungan per game: {avg_plays:,}")
+            return 0  # Success
+    except Exception as e:
+        print(f"Error in scraper: {str(e)}")
+        return 1  # Failure
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    exit(exit_code)
