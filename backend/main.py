@@ -43,6 +43,8 @@ class SearchRequest(BaseModel):
 class GameData(BaseModel):
     id: str
     name: str
+    genre: str
+    subgenre: str
     description: str
     enhance_description: bool = False
 
@@ -70,6 +72,8 @@ async def search(
 ):
     # Calculate from_ for pagination
     from_ = (request.page - 1) * request.page_size
+
+    print(f"Search request: {request.query}, Filters: {request.filters}, Page: {request.page}, Page Size: {request.page_size}")
     
     # Perform search
     search_results = es.search(
@@ -94,8 +98,6 @@ async def search(
         # Update hits with deduplicated results
         search_dict["hits"]["hits"] = unique_hits
         search_dict["hits"]["total"]["value"] = len(unique_hits)
-    print("ato gay")
-    print(search_dict)
     # Check if we should enhance with LLM
     if request.use_llm and search_dict.get("hits", {}).get("hits", []):
         try:

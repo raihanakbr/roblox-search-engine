@@ -106,10 +106,7 @@ class LLMService:
         Name: {game_data.get('name', 'Unknown')}
         Original Description: {game_data.get('description', '')}
         Genre: {game_data.get('genre', 'Unknown')}
-        Creator: {game_data.get('creator', {}).get('name', 'Unknown')}
-        Current Players: {game_data.get('playing', 0)}
-        Total Visits: {game_data.get('visits', 0)}
-        Max Players: {game_data.get('maxPlayers', 0)}
+        Subgenre: {game_data.get('subgenre', 'Unknown')}
         
         Please write an engaging, improved description for this game that highlights its key features,
         gameplay, and why players might enjoy it. Keep it concise but informative.

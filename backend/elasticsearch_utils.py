@@ -127,6 +127,16 @@ class ElasticsearchManager:
         - size: Number of results to return
         - from_: Offset for pagination
         """
+        # Map user-friendly filter names to actual Elasticsearch field paths
+        field_mapping = {
+            'creators': 'creator.name.keyword',
+            'genre': 'genre.keyword',
+            'genre_l1': 'genre_l1',
+            'genre_l2': 'genre_l2',
+            'maxPlayers': 'maxPlayers',
+            # Add other mappings as needed
+        }
+        
         query = {
                 "query": {
                     "function_score": {
@@ -190,11 +200,33 @@ class ElasticsearchManager:
             
             # Add filters if provided
         if filters:
+            print(filters)
             for field, value in filters.items():
-                if isinstance(value, list):
-                    query["query"]["function_score"]["query"]["bool"]["filter"].append({"terms": {field: value}})
+                # Handle max_players range filter specially
+                if field == 'max_players' and isinstance(value, str) and '-' in value:
+                    try:
+                        min_val, max_val = value.split('-')
+                        range_query = {"range": {"maxPlayers": {}}}
+                        
+                        if min_val and min_val != '*':
+                            range_query["range"]["maxPlayers"]["gte"] = float(min_val)
+                        
+                        # Only add upper bound if max_val is not an asterisk
+                        if max_val and max_val != '*':
+                            range_query["range"]["maxPlayers"]["lte"] = float(max_val)
+                        
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append(range_query)
+                    except Exception as e:
+                        logger.error(f"Error parsing max_players range: {e}")
+                        continue
                 else:
-                    query["query"]["function_score"]["query"]["bool"]["filter"].append({"term": {field: value}})
+                    # Map the field name if needed
+                    es_field = field_mapping.get(field, field)
+                    
+                    if isinstance(value, list):
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({"terms": {es_field: value}})
+                    else:
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({"term": {es_field: value}})
         
         try:
             results = self.es.search(index=self.index_name, body=query)
@@ -208,8 +240,11 @@ class ElasticsearchManager:
         query = {
             "size": 0,
             "aggs": {
-                "genres": {
-                    "terms": {"field": "genre.keyword", "size": 20}
+                "genre_l1": {
+                    "terms": {"field": "genre_l1", "size": 20}
+                },
+                "genre_l2": {
+                    "terms": {"field": "genre_l2", "size": 20}
                 },
                 "creators": {
                     "terms": {"field": "creator.name.keyword", "size": 20}
