@@ -17,7 +17,7 @@ export function FeaturedGames() {
     async function fetchTrendingGames() {
       try {
         setLoading(true)
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://rofind.site"
         const response = await fetch(`${apiUrl}/api/trending`, {
           method: 'POST',
           headers: {
