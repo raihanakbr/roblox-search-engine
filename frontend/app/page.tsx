@@ -102,27 +102,30 @@ export default async function Home({
         <div className="space-y-3">
           {analysisData.top_game && (
             <div className="mb-2">
-              <h4 className="text-sm font-medium text-purple-300 flex items-center">
+              <h4 className="text-sm font-medium text-white flex items-center">
                 <Trophy className="h-3.5 w-3.5 mr-1.5 text-yellow-400" />
                 Top Recommendation
               </h4>
-              <p className="text-sm text-gray-300 ml-5">{analysisData.top_game}</p>
+              <p className="text-sm text-white ml-5">{analysisData.top_game}</p>
             </div>
           )}
 
           {analysisData.features && (
             <div className="mb-2">
-              <h4 className="text-sm font-medium text-purple-300 mb-1">Key Features</h4>
+              <h4 className="text-sm font-medium text-white flex items-center mb-1">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-green-400" />
+                Key Features
+              </h4>
               {Array.isArray(analysisData.features) ? (
                 <ul className="list-disc pl-5 space-y-1">
                   {analysisData.features.map((feature, index) => (
-                    <li key={index} className="text-sm text-gray-300">
+                    <li key={index} className="text-sm text-white">
                       {/* Check if feature is an object with name/description */}
                       {typeof feature === 'object' && feature.name ? (
                         <div>
                           <span className="font-medium">{feature.name}</span>
                           {feature.description && (
-                            <span className="block ml-1 text-xs text-gray-400">
+                            <span className="block ml-1 text-xs text-gray-200">
                               {feature.description}
                             </span>
                           )}
@@ -135,7 +138,7 @@ export default async function Home({
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-gray-300">{analysisData.features}</p>
+                <p className="text-sm text-white">{analysisData.features}</p>
               )}
             </div>
           )}
@@ -177,7 +180,7 @@ export default async function Home({
             <h1 className="text-5xl md:text-7xl font-extrabold mb-6 text-center fun-heading">Rofind</h1>
           </div>
 
-          <p className="text-lg text-white font-medium mb-10 text-center max-w-2xl">
+          <p className="text-lg text-neutral-800 font-medium mb-10 text-center max-w-2xl">
             Discover amazing games and adventures in the Roblox universe!
           </p>
 
@@ -224,7 +227,7 @@ export default async function Home({
             // Search results view
             <div className="w-full mt-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white flex items-center">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                   <Search className="mr-2 h-6 w-6 text-pink-400" />
                   {total > 0
                     ? `${total > 210 ? "210+" : total} results for "${query}"`

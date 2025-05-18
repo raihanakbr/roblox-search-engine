@@ -85,7 +85,7 @@ export function SearchForm({ initialQuery, initialPage }: SearchFormProps) {
             checked={useLLM} 
             onCheckedChange={setUseLLM}
           />
-          <Label htmlFor="use-llm" className="flex items-center cursor-pointer">
+          <Label htmlFor="use-llm" className="flex items-center cursor-pointer text-neutral-700">
             <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
             Enhance with AI
           </Label>

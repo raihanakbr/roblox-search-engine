@@ -42,8 +42,7 @@ export function GameModal({ game, isOpen, onClose }: GameModalProps) {
     setEnhanceError(null)
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/enhance-description`, {
+      const response = await fetch("http://localhost:8000/api/enhance-description", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -152,7 +151,7 @@ export function GameModal({ game, isOpen, onClose }: GameModalProps) {
               {!enhancedDescription && !isEnhancing && (
                 <Button 
                   onClick={generateEnhancedDescription} 
-                  className="bg-purple-700 hover:bg-purple-600 text-white"
+                  className="fun-button text-white font-medium rounded-xl"
                   size="sm"
                 >
                   <Sparkles className="h-4 w-4 mr-2 text-yellow-300" />

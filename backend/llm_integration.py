@@ -55,7 +55,7 @@ class LLMService:
         
         Please provide:
         1. Improved search results ranking (list the games in order of relevance to the query)
-        2. 3 alternative search queries I could try to find better results
+        2. 3 alternative roblox game search queries I could try to find better results, avoid the word "games" and "roblox" because we already know that
         3. A brief analysis of what features of the top game match my search interests
         
         Format your response as JSON with keys "ranking", "alternative_queries", and "analysis".

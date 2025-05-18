@@ -56,7 +56,7 @@ const categories = [
 export function Categories() {
   return (
     <div className="mb-16">
-      <h2 className="text-3xl font-bold text-white mb-6">Popular Categories</h2>
+      <h2 className="text-3xl font-bold text-neutral-800 mb-6">Popular Categories</h2>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {categories.map((category) => (
