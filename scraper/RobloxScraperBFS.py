@@ -1,8 +1,9 @@
-import requests
 import json
 import time
-from datetime import datetime
 from collections import deque
+from datetime import datetime
+
+import requests
 
 # Konfigurasi
 INITIAL_GAME_ID = '7018190066'
@@ -36,13 +37,45 @@ def fetch_games_details(game_ids):
         results = {}
         data = response.json()
         if data.get('data'):
+            print(data['data'])
             for game in data['data']:
                 if 'id' in game:
                     results[str(game['id'])] = game
-                    
         return results
     except Exception as e:
         print(f"Error fetching details for games: {str(e)}")
+        return {}
+
+# Fungsi untuk mengambil thumbnail game
+def fetch_games_thumbnails(game_ids):
+    if not game_ids:
+        return {}
+    
+    try:
+        # Menggabungkan ID game untuk permintaan batch
+        ids_param = ",".join(game_ids)
+        url = f"https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds={ids_param}&format=png&size=768x432"
+        
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        results = {}
+        data = response.json()
+        
+        if data.get('data'):
+            for item in data['data']:
+                universe_id = str(item['universeId'])
+                if item.get('thumbnails') and len(item['thumbnails']) > 0 and item['thumbnails'][0].get('imageUrl'):
+                    results[universe_id] = item['thumbnails'][0]['imageUrl']
+        
+        return results
+    except Exception as e:
+        print(f"Error fetching thumbnails for games: {str(e)}")
         return {}
 
 # Fungsi untuk mengambil rekomendasi batch
@@ -123,9 +156,19 @@ def main():
                 print(f"Mengambil detail untuk {len(batch_ids)} game...")
                 game_details = fetch_games_details(batch_ids)
                 
+                # Fetch thumbnails for the same batch
+                print(f"Mengambil thumbnail untuk {len(batch_ids)} game...")
+                game_thumbnails = fetch_games_thumbnails(batch_ids)
+                
                 # Update koleksi dengan detail
                 for game_id, details in game_details.items():
                     if game_id in collected_games:
+                        # Add universe ID to the details
+                        if details:
+                            details['universeId'] = game_id
+                            # Add image URL if available
+                            if game_id in game_thumbnails:
+                                details['imageUrl'] = game_thumbnails[game_id]
                         collected_games[game_id] = details
                         print(f"Menambahkan game: {details.get('name', 'Unknown')}")
                 
@@ -142,8 +185,18 @@ def main():
             print(f"Mengambil detail final untuk {len(batch_ids)} game...")
             game_details = fetch_games_details(batch_ids)
             
+            # Fetch thumbnails for the final batch
+            print(f"Mengambil thumbnail final untuk {len(batch_ids)} game...")
+            game_thumbnails = fetch_games_thumbnails(batch_ids)
+            
             for game_id, details in game_details.items():
                 if game_id in collected_games:
+                    # Add universe ID to the details
+                    if details:
+                        details['universeId'] = game_id
+                        # Add image URL if available
+                        if game_id in game_thumbnails:
+                            details['imageUrl'] = game_thumbnails[game_id]
                     collected_games[game_id] = details
                     print(f"Menambahkan game: {details.get('name', 'Unknown')}")
             

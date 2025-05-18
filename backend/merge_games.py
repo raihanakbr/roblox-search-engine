@@ -8,7 +8,6 @@ def merge_roblox_data():
         data_dir = os.path.join(base_path, "data")
         existing_file = os.path.join(data_dir, "roblox_data.json")
         new_file = os.path.join(data_dir, "roblox_games_gg.json")
-        
         # Create data directory if it doesn't exist
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
@@ -23,6 +22,7 @@ def merge_roblox_data():
         # Load new data
         with open(new_file, 'r', encoding='utf-8') as f:
             new_data = json.load(f)
+            print(new_data)
         print(f"Loaded {len(new_data)} new games")
         
         # Create dictionary from existing data for fast lookup
