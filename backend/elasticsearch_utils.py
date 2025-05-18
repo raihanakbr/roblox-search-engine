@@ -1,6 +1,7 @@
-from elasticsearch import Elasticsearch
 import json
 import logging
+
+from elasticsearch import Elasticsearch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,10 +35,12 @@ class ElasticsearchManager:
             "mappings": {
                 "properties": {
                     "id": {"type": "keyword"},
+                    "universeId": {"type": "keyword"},
                     "name": {"type": "text", "analyzer": "standard", "fields": {"keyword": {"type": "keyword"}}},
                     "description": {"type": "text", "analyzer": "standard"},
                     "sourceName": {"type": "text"},
                     "sourceDescription": {"type": "text"},
+                    "imageUrl": {"type": "keyword"},
                     "creator": {
                         "properties": {
                             "id": {"type": "long"},
@@ -81,6 +84,45 @@ class ElasticsearchManager:
             logger.info(f"Created index {self.index_name}")
         except Exception as e:
             logger.error(f"Error creating index: {e}")
+    
+    def delete_index(self, confirm=False):
+        """Delete the Elasticsearch index"""
+        if not confirm:
+            logger.warning("Delete operation requires confirmation. Set confirm=True to proceed.")
+            return False
+            
+        try:
+            if self.es.indices.exists(index=self.index_name):
+                self.es.indices.delete(index=self.index_name)
+                logger.info(f"Successfully deleted index: {self.index_name}")
+                return True
+            else:
+                logger.info(f"Index {self.index_name} does not exist, nothing to delete.")
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting index: {str(e)}")
+            return False
+    
+    def recreate_index(self, data_file=None):
+        """Delete and recreate the index, optionally reloading data"""
+        try:
+            # Delete if exists
+            if self.es.indices.exists(index=self.index_name):
+                self.es.indices.delete(index=self.index_name)
+                logger.info(f"Deleted existing index: {self.index_name}")
+            
+            # Create new index
+            self.create_index()
+            
+            # Reindex data if file provided
+            if data_file:
+                self.index_data(data_file)
+                logger.info(f"Reloaded data from {data_file}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error recreating index: {str(e)}")
+            return False
     
     def index_data(self, data_file):
         """Index data from JSON file into Elasticsearch"""
@@ -158,31 +200,13 @@ class ElasticsearchManager:
                         "functions": [
                             {
                                 "field_value_factor": {
-                                    "field": "visits",
-                                    "factor": 0.005,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                },
-                                "weight": 0.3
-                            },
-                            {
-                                "field_value_factor": {
                                     "field": "playing",
-                                    "factor": 0.01,
+                                    "factor": 0.05,
                                     "modifier": "log1p",
                                     "missing": 1
                                 },
-                                "weight": 0.5
+                                "weight": 0.8
                             },
-                            {
-                                "field_value_factor": {
-                                    "field": "favoritedCount",
-                                    "factor": 0.01,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                },
-                                "weight": 0.2
-                            }
                         ],
                         "score_mode": "sum",
                         "boost_mode": "multiply"
@@ -276,12 +300,36 @@ class ElasticsearchManager:
             logger.error(f"Aggregation error: {e}")
             return {"error": str(e)}
 
+    def get_trending_games(self, size=10):
+        """
+        Get trending games sorted by current player count
+        
+        Parameters:
+        - size: Number of trending games to return
+        """
+        query = {
+            "query": {
+                "match_all": {}  # Match all documents
+            },
+            "sort": [
+                {"playing": {"order": "desc"}}  # Sort by player count, highest first
+            ],
+            "size": size
+        }
+        
+        try:
+            results = self.es.search(index=self.index_name, body=query)
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching trending games: {e}")
+            return {"error": str(e)}
+
 if __name__ == "__main__":
     # Test script
     es_manager = ElasticsearchManager()
     if es_manager.check_connection():
         es_manager.create_index()
-        es_manager.index_data("./data/roblox_data.json")
+        es_manager.index_data("../data/roblox_data.json")
         
         # Test search
         test_results = es_manager.search("gorilla")

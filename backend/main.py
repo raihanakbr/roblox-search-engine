@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from elasticsearch_utils import ElasticsearchManager
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,6 +47,21 @@ class GameData(BaseModel):
     subgenre: str
     description: str
     enhance_description: bool = False
+
+# Add new models for index management
+class DeleteIndexRequest(BaseModel):
+    admin_key: str
+    confirm: bool = False
+
+class RecreateIndexRequest(BaseModel):
+    admin_key: str
+    data_file: Optional[str] = "./data/roblox_data.json"
+
+class TrendingRequest(BaseModel):
+    limit: int = 10
+
+# Admin key for protected operations - in production use a more secure approach
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "your-secure-admin-key")
 
 # Dependency to ensure Elasticsearch is connected
 async def get_es_manager():
@@ -149,6 +164,77 @@ async def initialize_data(es: ElasticsearchManager = Depends(get_es_manager)):
     except Exception as e:
         logger.error(f"Error initializing data: {e}")
         raise HTTPException(status_code=500, detail=f"Data initialization error: {str(e)}")
+
+@app.post("/api/admin/delete-index")
+async def delete_index(
+    request: DeleteIndexRequest,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Delete the Elasticsearch index (admin only)"""
+    # Simple security check
+    if request.admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+        
+    success = es.delete_index(confirm=request.confirm)
+    if success:
+        return {"status": "success", "message": f"Index {es.index_name} deleted"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to delete index. Ensure confirm=True is set.")
+
+@app.post("/api/admin/recreate-index")
+async def recreate_index(
+    request: RecreateIndexRequest,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Delete and recreate the Elasticsearch index (admin only)"""
+    # Simple security check
+    if request.admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    data_file = request.data_file
+    # Validate that data file exists
+    if data_file and not os.path.exists(data_file):
+        raise HTTPException(status_code=400, detail=f"Data file not found: {data_file}")
+        
+    success = es.recreate_index(data_file=data_file)
+    if success:
+        return {
+            "status": "success", 
+            "message": f"Index {es.index_name} recreated" + 
+                      (f" and data loaded from {data_file}" if data_file else "")
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to recreate index.")
+
+@app.post("/api/trending")
+async def get_trending_games(
+    request: TrendingRequest = TrendingRequest(),
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Get the top trending games based on current player count"""
+    # Ensure limit is within reasonable bounds
+    limit = max(1, min(request.limit, 50))  # Between 1 and 50
+    
+    # Get trending games
+    trending_results = es.get_trending_games(size=limit)
+    
+    # Process results to ensure unique entries and clean format
+    trending_dict = dict(trending_results)
+    if "hits" in trending_dict and "hits" in trending_dict["hits"]:
+        seen_ids = set()
+        unique_hits = []
+        
+        for hit in trending_dict["hits"]["hits"]:
+            game_id = hit["_source"].get("id")
+            if game_id and game_id not in seen_ids:
+                seen_ids.add(game_id)
+                unique_hits.append(hit)
+        
+        # Update hits with deduplicated results
+        trending_dict["hits"]["hits"] = unique_hits
+        trending_dict["hits"]["total"]["value"] = len(unique_hits)
+    
+    return trending_dict
 
 if __name__ == "__main__":
     import uvicorn
