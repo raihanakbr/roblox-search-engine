@@ -22,7 +22,6 @@ def merge_roblox_data():
         # Load new data
         with open(new_file, 'r', encoding='utf-8') as f:
             new_data = json.load(f)
-            print(new_data)
         print(f"Loaded {len(new_data)} new games")
         
         # Create dictionary from existing data for fast lookup

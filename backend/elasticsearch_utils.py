@@ -246,7 +246,7 @@ if __name__ == "__main__":
     es_manager = ElasticsearchManager()
     if es_manager.check_connection():
         es_manager.create_index()
-        es_manager.index_data("./data/roblox_data.json")
+        es_manager.index_data("../data/roblox_data.json")
         
         # Test search
         test_results = es_manager.search("gorilla")
