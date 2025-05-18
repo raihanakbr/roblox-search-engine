@@ -36,9 +36,15 @@ export function SearchForm({ initialQuery, initialPage }: SearchFormProps) {
     }
   }, [])
 
+  // Add this effect to reset loading state when URL changes
+  useEffect(() => {
+    // This will capture when navigation is complete
+    setIsLoading(false)
+  }, [searchParams])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setIsLoading(true) // Set loading to true
 
     const params = new URLSearchParams()
     if (query) params.set("query", query)
@@ -46,16 +52,20 @@ export function SearchForm({ initialQuery, initialPage }: SearchFormProps) {
     if (useLLM) params.set("enhance", "true")
 
     router.push(`/?${params.toString()}`)
-    setIsLoading(false)
+    // Don't reset isLoading here - it will be reset by the useEffect when navigation completes
   }
 
   const handleSuggestionClick = (suggestion: string) => {
     setQuery(suggestion)
+    setIsLoading(true) // Set loading to true
+    
     const params = new URLSearchParams()
     params.set("query", suggestion)
     params.set("page", "1")
     if (useLLM) params.set("enhance", "true")
+    
     router.push(`/?${params.toString()}`)
+    // Don't reset isLoading here either
   }
 
   return (

@@ -84,6 +84,13 @@ export default async function Home({
       )
     : { results: [], total: 0, currentPage: 1, totalPages: 0, suggestions: [], llmAnalysis: null }
 
+  // Add this helper function at the top of your renderLLMAnalysis function
+  const safeRender = (content) => {
+    if (content === null || content === undefined) return "";
+    if (typeof content === 'object') return JSON.stringify(content);
+    return content.toString();
+  };
+
   // Handle rendering the LLM analysis properly
   const renderLLMAnalysis = () => {
     if (!llmAnalysis) return null
@@ -106,7 +113,7 @@ export default async function Home({
                 <Trophy className="h-3.5 w-3.5 mr-1.5 text-yellow-400" />
                 Top Recommendation
               </h4>
-              <p className="text-sm text-white ml-5">{analysisData.top_game}</p>
+              <p className="text-sm text-white ml-5">{safeRender(analysisData.top_game)}</p>
             </div>
           )}
 
@@ -123,16 +130,16 @@ export default async function Home({
                       {/* Check if feature is an object with name/description */}
                       {typeof feature === 'object' && feature.name ? (
                         <div>
-                          <span className="font-medium">{feature.name}</span>
+                          <span className="font-medium">{safeRender(feature.name)}</span>
                           {feature.description && (
                             <span className="block ml-1 text-xs text-gray-200">
-                              {feature.description}
+                              {safeRender(feature.description)}
                             </span>
                           )}
                         </div>
                       ) : (
                         /* Otherwise render as string */
-                        feature.toString()
+                        safeRender(feature)
                       )}
                     </li>
                   ))}
@@ -146,7 +153,7 @@ export default async function Home({
           {analysisData.conclusion && (
             <div>
               <h4 className="text-sm font-medium text-purple-300 mb-1">Summary</h4>
-              <p className="text-sm text-gray-300">{analysisData.conclusion}</p>
+              <p className="text-sm text-gray-300">{safeRender(analysisData.conclusion)}</p>
             </div>
           )}
         </div>
