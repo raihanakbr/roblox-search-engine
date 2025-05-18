@@ -1,6 +1,7 @@
-from elasticsearch import Elasticsearch
 import json
 import logging
+
+from elasticsearch import Elasticsearch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,6 +84,45 @@ class ElasticsearchManager:
             logger.info(f"Created index {self.index_name}")
         except Exception as e:
             logger.error(f"Error creating index: {e}")
+    
+    def delete_index(self, confirm=False):
+        """Delete the Elasticsearch index"""
+        if not confirm:
+            logger.warning("Delete operation requires confirmation. Set confirm=True to proceed.")
+            return False
+            
+        try:
+            if self.es.indices.exists(index=self.index_name):
+                self.es.indices.delete(index=self.index_name)
+                logger.info(f"Successfully deleted index: {self.index_name}")
+                return True
+            else:
+                logger.info(f"Index {self.index_name} does not exist, nothing to delete.")
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting index: {str(e)}")
+            return False
+    
+    def recreate_index(self, data_file=None):
+        """Delete and recreate the index, optionally reloading data"""
+        try:
+            # Delete if exists
+            if self.es.indices.exists(index=self.index_name):
+                self.es.indices.delete(index=self.index_name)
+                logger.info(f"Deleted existing index: {self.index_name}")
+            
+            # Create new index
+            self.create_index()
+            
+            # Reindex data if file provided
+            if data_file:
+                self.index_data(data_file)
+                logger.info(f"Reloaded data from {data_file}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error recreating index: {str(e)}")
+            return False
     
     def index_data(self, data_file):
         """Index data from JSON file into Elasticsearch"""

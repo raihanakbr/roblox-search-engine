@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from elasticsearch_utils import ElasticsearchManager
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +45,18 @@ class GameData(BaseModel):
     name: str
     description: str
     enhance_description: bool = False
+
+# Add new models for index management
+class DeleteIndexRequest(BaseModel):
+    admin_key: str
+    confirm: bool = False
+
+class RecreateIndexRequest(BaseModel):
+    admin_key: str
+    data_file: Optional[str] = "./data/roblox_data.json"
+
+# Admin key for protected operations - in production use a more secure approach
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "your-secure-admin-key")
 
 # Dependency to ensure Elasticsearch is connected
 async def get_es_manager():
@@ -147,6 +159,47 @@ async def initialize_data(es: ElasticsearchManager = Depends(get_es_manager)):
     except Exception as e:
         logger.error(f"Error initializing data: {e}")
         raise HTTPException(status_code=500, detail=f"Data initialization error: {str(e)}")
+
+@app.post("/api/admin/delete-index")
+async def delete_index(
+    request: DeleteIndexRequest,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Delete the Elasticsearch index (admin only)"""
+    # Simple security check
+    if request.admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+        
+    success = es.delete_index(confirm=request.confirm)
+    if success:
+        return {"status": "success", "message": f"Index {es.index_name} deleted"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to delete index. Ensure confirm=True is set.")
+
+@app.post("/api/admin/recreate-index")
+async def recreate_index(
+    request: RecreateIndexRequest,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Delete and recreate the Elasticsearch index (admin only)"""
+    # Simple security check
+    if request.admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    data_file = request.data_file
+    # Validate that data file exists
+    if data_file and not os.path.exists(data_file):
+        raise HTTPException(status_code=400, detail=f"Data file not found: {data_file}")
+        
+    success = es.recreate_index(data_file=data_file)
+    if success:
+        return {
+            "status": "success", 
+            "message": f"Index {es.index_name} recreated" + 
+                      (f" and data loaded from {data_file}" if data_file else "")
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to recreate index.")
 
 if __name__ == "__main__":
     import uvicorn
