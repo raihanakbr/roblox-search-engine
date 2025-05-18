@@ -55,6 +55,9 @@ class RecreateIndexRequest(BaseModel):
     admin_key: str
     data_file: Optional[str] = "./data/roblox_data.json"
 
+class TrendingRequest(BaseModel):
+    limit: int = 10
+
 # Admin key for protected operations - in production use a more secure approach
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "your-secure-admin-key")
 
@@ -200,6 +203,36 @@ async def recreate_index(
         }
     else:
         raise HTTPException(status_code=500, detail="Failed to recreate index.")
+
+@app.post("/api/trending")
+async def get_trending_games(
+    request: TrendingRequest = TrendingRequest(),
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Get the top trending games based on current player count"""
+    # Ensure limit is within reasonable bounds
+    limit = max(1, min(request.limit, 50))  # Between 1 and 50
+    
+    # Get trending games
+    trending_results = es.get_trending_games(size=limit)
+    
+    # Process results to ensure unique entries and clean format
+    trending_dict = dict(trending_results)
+    if "hits" in trending_dict and "hits" in trending_dict["hits"]:
+        seen_ids = set()
+        unique_hits = []
+        
+        for hit in trending_dict["hits"]["hits"]:
+            game_id = hit["_source"].get("id")
+            if game_id and game_id not in seen_ids:
+                seen_ids.add(game_id)
+                unique_hits.append(hit)
+        
+        # Update hits with deduplicated results
+        trending_dict["hits"]["hits"] = unique_hits
+        trending_dict["hits"]["total"]["value"] = len(unique_hits)
+    
+    return trending_dict
 
 if __name__ == "__main__":
     import uvicorn

@@ -190,31 +190,13 @@ class ElasticsearchManager:
                         "functions": [
                             {
                                 "field_value_factor": {
-                                    "field": "visits",
-                                    "factor": 0.005,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                },
-                                "weight": 0.3
-                            },
-                            {
-                                "field_value_factor": {
                                     "field": "playing",
-                                    "factor": 0.01,
+                                    "factor": 0.05,
                                     "modifier": "log1p",
                                     "missing": 1
                                 },
-                                "weight": 0.5
+                                "weight": 0.8
                             },
-                            {
-                                "field_value_factor": {
-                                    "field": "favoritedCount",
-                                    "factor": 0.01,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                },
-                                "weight": 0.2
-                            }
                         ],
                         "score_mode": "sum",
                         "boost_mode": "multiply"
@@ -281,6 +263,30 @@ class ElasticsearchManager:
             return results["aggregations"]
         except Exception as e:
             logger.error(f"Aggregation error: {e}")
+            return {"error": str(e)}
+
+    def get_trending_games(self, size=10):
+        """
+        Get trending games sorted by current player count
+        
+        Parameters:
+        - size: Number of trending games to return
+        """
+        query = {
+            "query": {
+                "match_all": {}  # Match all documents
+            },
+            "sort": [
+                {"playing": {"order": "desc"}}  # Sort by player count, highest first
+            ],
+            "size": size
+        }
+        
+        try:
+            results = self.es.search(index=self.index_name, body=query)
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching trending games: {e}")
             return {"error": str(e)}
 
 if __name__ == "__main__":
