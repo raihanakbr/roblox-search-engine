@@ -11,7 +11,8 @@ import { Gamepad2, Sparkles, Search, Trophy, CheckCircle2, List } from "lucide-r
 // Add a new function to fetch aggregations
 async function fetchAggregations() {
   try {
-    const response = await fetch("http://localhost:8000/api/aggregations", {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; // Fallback for local dev if needed
+    const response = await fetch(`${apiUrl}/api/aggregations`, {
       cache: "no-store",
     });
     

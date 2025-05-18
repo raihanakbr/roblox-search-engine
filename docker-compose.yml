@@ -50,12 +50,15 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+      # Don't mount node_modules or .next to avoid conflicts
       - /app/node_modules
       - /app/.next
     networks:
       - elastic
     depends_on:
       - api
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
   
   scheduler:
     build:

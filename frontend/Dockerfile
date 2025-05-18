@@ -1,41 +1,30 @@
-# Base image for building the app
-FROM node:20-alpine AS builder
+# Base image
+FROM node:20-alpine
 
-# Install pnpm
+# Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files
 COPY package.json pnpm-lock.yaml* ./
+
+# Install dependencies first
 RUN pnpm install --frozen-lockfile
 
-# Copy the rest of the code
+# Copy the rest of the application (node_modules excluded by .dockerignore)
 COPY . .
 
 # Build the Next.js app
 RUN pnpm build
 
-# Production image
-FROM node:20-alpine AS runner
-WORKDIR /app
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 # Set environment to production
 ENV NODE_ENV production
-
-# Copy necessary files from builder
-COPY --from=builder /app/next.config.js ./
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+ENV HOSTNAME "0.0.0.0"
 
 # Expose port
 EXPOSE 3000
 
-# Start the Next.js app
+# Start the app
 CMD ["pnpm", "start"]

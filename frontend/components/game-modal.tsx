@@ -42,7 +42,8 @@ export function GameModal({ game, isOpen, onClose }: GameModalProps) {
     setEnhanceError(null)
     
     try {
-      const response = await fetch("http://localhost:8000/api/enhance-description", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/enhance-description`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

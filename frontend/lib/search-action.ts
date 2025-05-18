@@ -101,7 +101,8 @@ export async function searchGames(
     }
 
     // Make API request to backend with the structured request body
-    const response = await fetch("http://localhost:8000/api/search", {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const response = await fetch(`${apiUrl}/api/search`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
