@@ -34,10 +34,12 @@ class ElasticsearchManager:
             "mappings": {
                 "properties": {
                     "id": {"type": "keyword"},
+                    "universeId": {"type": "keyword"},
                     "name": {"type": "text", "analyzer": "standard", "fields": {"keyword": {"type": "keyword"}}},
                     "description": {"type": "text", "analyzer": "standard"},
                     "sourceName": {"type": "text"},
                     "sourceDescription": {"type": "text"},
+                    "imageUrl": {"type": "keyword"},
                     "creator": {
                         "properties": {
                             "id": {"type": "long"},
