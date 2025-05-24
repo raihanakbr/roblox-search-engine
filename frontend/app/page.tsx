@@ -1,12 +1,12 @@
-import { SearchForm } from "@/components/search-form"
+import { Categories } from "@/components/categories"
+import { FeaturedGames } from "@/components/featured-games"
+import { Filters } from "@/components/filters"
 import { GameResults } from "@/components/game-results"
 import { Pagination } from "@/components/pagination"
-import { FeaturedGames } from "@/components/featured-games"
-import { Categories } from "@/components/categories"
-import { Filters } from "@/components/filters"
+import { SearchForm } from "@/components/search-form"
 import { searchGames } from "@/lib/search-action"
+import { CheckCircle2, Gamepad2, Search, Sparkles, Trophy } from "lucide-react"
 import { Suspense } from "react"
-import { Gamepad2, Sparkles, Search, Trophy, CheckCircle2, List } from "lucide-react"
 
 // Add a new function to fetch aggregations
 async function fetchAggregations() {
@@ -37,15 +37,15 @@ export default async function Home({
     enhance?: string; 
     creators?: string; 
     players?: string;
-    genre_l1?: string; // Update to genre_l1
-    genre_l2?: string; // Add genre_l2
+    genre_l1?: string;
+    genre_l2?: string;
   }
 }) {
   const query = searchParams.query || ""
   const page = Number.parseInt(searchParams.page || "1", 10)
   const enhance = searchParams.enhance === "true"
-  const pageSize = 21 // Fixed page size of 21 items
-  const maxPages = 10 // Maximum of 10 pages (210 items total)
+  const displayPageSize = 11 // Items to show per page
+  const maxPages = 10 // Maximum pages to fetch from backend
 
   console.log(`Search with query: ${query}, page: ${page}, enhance: ${enhance}`)
 
@@ -71,14 +71,14 @@ export default async function Home({
   const { results, total, currentPage, totalPages, suggestions, llmAnalysis } = query
     ? await searchGames(
         query, 
-        pageSize, 
+        displayPageSize, 
         page, 
         maxPages, 
         enhance, 
         { 
           creators: creators, 
-          genre_l1: genresL1, // Changed from genres to genre_l1
-          genre_l2: genresL2, // Added genre_l2
+          genre_l1: genresL1,
+          genre_l2: genresL2,
           playerRange: playerRange 
         }
       )
@@ -237,11 +237,13 @@ export default async function Home({
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                   <Search className="mr-2 h-6 w-6 text-pink-400" />
                   {total > 0
-                    ? `${total > 210 ? "210+" : total} results for "${query}"`
+                    ? `${total} results for "${query}"`
                     : `No results found for "${query}"`}
                 </h2>
                 {total > 0 && (
-                  <span className="text-white bg-[#3a0099] px-4 py-1 rounded-full">Page {currentPage} of 10</span>
+                  <span className="text-white bg-[#3a0099] px-4 py-1 rounded-full">
+                    Page {currentPage} of {totalPages} • Showing {results.length} of {total} games
+                  </span>
                 )}
               </div>
 
@@ -252,8 +254,8 @@ export default async function Home({
                     <Filters 
                       creators={aggregations.creators.buckets} 
                       playerRanges={aggregations.max_players.buckets}
-                      genres={aggregations.genre_l1.buckets} // Changed from genres to genre_l1
-                      subgenres={aggregations.genre_l2.buckets} // Added genre_l2
+                      genres={aggregations.genre_l1.buckets}
+                      subgenres={aggregations.genre_l2.buckets}
                     />
                   )}
                 </div>
@@ -264,7 +266,10 @@ export default async function Home({
                     <GameResults results={results} />
                   </Suspense>
 
-                  {total > 0 && <Pagination currentPage={currentPage} maxPages={10} />}
+                  {/* Only show pagination if there are results and multiple pages */}
+                  {total > 0 && totalPages > 1 && (
+                    <Pagination currentPage={currentPage} maxPages={totalPages} />
+                  )}
                 </div>
               </div>
             </div>

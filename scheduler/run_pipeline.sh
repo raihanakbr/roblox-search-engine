@@ -29,10 +29,10 @@ if [ $? -ne 0 ]; then
 fi
 echo "Merge completed successfully"
 
-# Step 3: Index in Elasticsearch
+# Step 3: Index in Elasticsearch (with auto flag for no prompts)
 echo "Step 3: Indexing data in Elasticsearch"
 cd /app/backend
-/usr/local/bin/python index_data.py
+/usr/local/bin/python index_data.py --auto --force
 if [ $? -ne 0 ]; then
     echo "Error: Indexing failed"
     exit 1

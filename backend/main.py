@@ -37,7 +37,7 @@ class SearchRequest(BaseModel):
     query: str
     filters: Optional[Dict[str, Any]] = None
     page: int = 1
-    page_size: int = 10
+    page_size: int = 110
     use_llm: bool = False
 
 class GameData(BaseModel):
@@ -89,30 +89,54 @@ async def search(
     from_ = (request.page - 1) * request.page_size
 
     print(f"Search request: {request.query}, Filters: {request.filters}, Page: {request.page}, Page Size: {request.page_size}")
+    print(f"Calculated from_: {from_}")
     
-    # Perform search
+    # Request more data to account for potential duplicates
+    # If requesting 110, request 200 to ensure we get enough unique results
+    search_size = min(request.page_size * 2, 200) if request.page_size >= 100 else request.page_size
+    
+    print(f"Requesting {search_size} documents from Elasticsearch to account for duplicates")
+    
+    # Perform search with larger size
     search_results = es.search(
         query_text=request.query,
         filters=request.filters,
-        size=request.page_size,
+        size=search_size,
         from_=from_
     )
     
     # Convert the Elasticsearch response to a dictionary
     search_dict = dict(search_results)
+    
+    # Store original total before deduplication
+    original_total = search_dict.get("hits", {}).get("total", {}).get("value", 0)
+    original_hits_count = len(search_dict.get("hits", {}).get("hits", []))
+    
+    print(f"Elasticsearch returned: {original_hits_count} hits out of {original_total} total")
+    
+    # Deduplication logic
     if "hits" in search_dict and "hits" in search_dict["hits"]:
         seen_ids = set()
         unique_hits = []
+        duplicate_count = 0
         
         for hit in search_dict["hits"]["hits"]:
             game_id = hit["_source"].get("id")
             if game_id and game_id not in seen_ids:
                 seen_ids.add(game_id)
                 unique_hits.append(hit)
+                
+                # Stop when we have enough unique results
+                if len(unique_hits) >= request.page_size:
+                    break
+            elif game_id:
+                duplicate_count += 1
         
-        # Update hits with deduplicated results
-        search_dict["hits"]["hits"] = unique_hits
-        search_dict["hits"]["total"]["value"] = len(unique_hits)
+        # Update hits with deduplicated results (limited to requested page_size)
+        search_dict["hits"]["hits"] = unique_hits[:request.page_size]
+        
+        print(f"After deduplication: {len(unique_hits)} unique hits (showing {len(search_dict['hits']['hits'])}), {duplicate_count} duplicates found, original total preserved: {original_total}")
+    
     # Check if we should enhance with LLM
     if request.use_llm and search_dict.get("hits", {}).get("hits", []):
         try:
@@ -137,6 +161,7 @@ async def search(
                 "analysis": "LLM enhancement unavailable."
             }
     
+    print(f"Final response: {len(search_dict['hits']['hits'])} hits, total: {search_dict['hits']['total']['value']}")
     return search_dict
 
 @app.get("/api/aggregations")
@@ -235,6 +260,89 @@ async def get_trending_games(
         trending_dict["hits"]["total"]["value"] = len(unique_hits)
     
     return trending_dict
+
+@app.post("/api/admin/remove-duplicates")
+async def remove_duplicates(
+    admin_key: str,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Remove duplicate games from the index (admin only)"""
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    # Get stats before cleanup
+    stats_before = es.get_index_stats()
+    
+    success = es.remove_duplicates()
+    if success:
+        # Get stats after cleanup
+        stats_after = es.get_index_stats()
+        
+        return {
+            "status": "success",
+            "message": "Duplicates removed successfully",
+            "before": stats_before,
+            "after": stats_after
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to remove duplicates")
+
+@app.get("/api/admin/index-stats")
+async def get_index_stats(
+    admin_key: str,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Get index statistics (admin only)"""
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    stats = es.get_index_stats()
+    if stats:
+        return stats
+    else:
+        raise HTTPException(status_code=500, detail="Failed to get index statistics")
+
+@app.post("/api/admin/clean-reindex")
+async def clean_reindex(
+    request: RecreateIndexRequest,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Delete index, recreate, and reindex with clean data (admin only)"""
+    # Simple security check
+    if request.admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    data_file = request.data_file
+    # Validate that data file exists
+    if data_file and not os.path.exists(data_file):
+        raise HTTPException(status_code=400, detail=f"Data file not found: {data_file}")
+        
+    try:
+        # Get stats before cleanup
+        old_stats = None
+        if es.es.indices.exists(index=es.index_name):
+            old_stats = es.get_index_stats()
+        
+        # Delete and recreate index
+        success = es.recreate_index(data_file=data_file)
+        
+        if success:
+            # Get new stats
+            new_stats = es.get_index_stats()
+            
+            return {
+                "status": "success", 
+                "message": f"Index {es.index_name} cleaned and reindexed",
+                "old_stats": old_stats,
+                "new_stats": new_stats,
+                "data_file": data_file
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to clean and reindex.")
+            
+    except Exception as e:
+        logger.error(f"Error during clean reindex: {e}")
+        raise HTTPException(status_code=500, detail=f"Clean reindex failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -38,8 +38,8 @@ export async function searchGames(
   filters?: { 
     creators?: string[]; 
     playerRange?: string;
-    genre_l1?: string[]; // Changed from genres to genre_l1
-    genre_l2?: string[]; // Added genre_l2
+    genre_l1?: string[];
+    genre_l2?: string[];
   }
 ): Promise<{ 
   results: Game[]; 
@@ -61,47 +61,44 @@ export async function searchGames(
     // Set up timeout for LLM-enhanced searches
     const controller = new AbortController();
     const timeoutId = useLLM ? 
-      setTimeout(() => controller.abort(), 15000) : // 15 second timeout for LLM
+      setTimeout(() => controller.abort(), 15000) : 
       null;
 
     console.log(`Searching with LLM enhancement: ${useLLM ? 'YES' : 'NO'}`);
+    console.log(`Strategy: Fetch all data first, then paginate locally with pageSize=${pageSize}`);
     console.log(`Applying filters:`, filters);
 
-    // Create the request body with filters
+    // Always fetch 110 items first to get all available data
     const requestBody: any = {
       query: query,
-      page_size: pageSize,
-      page: validPage,
+      page_size: 110, // Always fetch maximum available data
+      page: 1, // Always start from page 1
       use_llm: useLLM,
     };
     
-    // Add filters if they exist - make sure to format them correctly for your API
+    // Add filters if they exist
     if (filters) {
       requestBody.filters = {};
       
-      // Add creator filters if any are selected
       if (filters.creators && filters.creators.length > 0) {
         requestBody.filters.creators = filters.creators;
       }
       
-      // Add genre_l1 filters if any are selected
       if (filters.genre_l1 && filters.genre_l1.length > 0) {
         requestBody.filters.genre_l1 = filters.genre_l1;
       }
       
-      // Add genre_l2 filters if any are selected
       if (filters.genre_l2 && filters.genre_l2.length > 0) {
         requestBody.filters.genre_l2 = filters.genre_l2;
       }
       
-      // Add player range filter if selected
       if (filters.playerRange) {
         requestBody.filters.max_players = filters.playerRange;
       }
     }
 
-    // Make API request to backend with the structured request body
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Make API request to backend
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const response = await fetch(`${apiUrl}/api/search`, {
       method: "POST",
       headers: {
@@ -122,14 +119,15 @@ export async function searchGames(
 
     const data: SearchResponse = await response.json()
     
-    console.log("Search response received, has filters:", !!requestBody.filters);
+    console.log("Search response received, total from API:", data.hits.total.value);
+    console.log("Actual results returned:", data.hits.hits.length);
     
     // Extract LLM enhancements if available
     const suggestions = data.llm_enhancements?.alternative_queries || []
     const llmAnalysis = data.llm_enhancements?.analysis
 
-    // Transform API response to our Game type
-    const results = data.hits.hits.map((hit) => {
+    // Transform ALL results to our Game type
+    const allResults = data.hits.hits.map((hit) => {
       const source = hit._source
 
       // Get highlighted name if available
@@ -145,7 +143,7 @@ export async function searchGames(
         id: source.id,
         rootPlaceId: source.rootPlaceId,
         name: source.name,
-        formattedName: formattedName, // Store the highlighted name
+        formattedName: formattedName,
         description: source.description,
         creator: source.creator,
         imageUrl: source.imageUrl,
@@ -159,20 +157,33 @@ export async function searchGames(
         genre_l2: source.genre_l2,
         favoritedCount: source.favoritedCount,
         price: source.price,
-        // Fallback thumbnail if imageUrl is not available
         thumbnail: source.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
       }
     })
 
-    // Calculate total pages, but cap at maxPages
-    const total = data.hits.total.value
-    const totalPages = Math.min(Math.ceil(total / pageSize), maxPages)
+    // Calculate real pagination based on actual results
+    const totalResults = allResults.length; // Use actual results count
+    const itemsPerPage = 11; // Fixed items per page for display
+    const actualTotalPages = Math.ceil(totalResults / itemsPerPage);
+    const clampedCurrentPage = Math.min(validPage, actualTotalPages || 1);
+    
+    // Calculate pagination slice
+    const startIndex = (clampedCurrentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedResults = allResults.slice(startIndex, endIndex);
+
+    console.log(`Pagination calculation:`);
+    console.log(`- Total results available: ${totalResults}`);
+    console.log(`- Items per page: ${itemsPerPage}`);
+    console.log(`- Total pages needed: ${actualTotalPages}`);
+    console.log(`- Current page: ${clampedCurrentPage}`);
+    console.log(`- Showing results ${startIndex + 1}-${Math.min(endIndex, totalResults)} of ${totalResults}`);
 
     return {
-      results,
-      total,
-      currentPage: validPage,
-      totalPages,
+      results: paginatedResults,
+      total: totalResults, // Use actual available results
+      currentPage: clampedCurrentPage,
+      totalPages: actualTotalPages, // Use calculated pages based on actual data
       suggestions,
       llmAnalysis,
     }

@@ -140,24 +140,95 @@ class ElasticsearchManager:
                         data = data[k]
                         break
             
-            # Bulk indexing
-            bulk_data = []
-            for game in data:
-                bulk_data.append({"index": {"_index": self.index_name}})
-                bulk_data.append(game)
+            # Debug: Log data type and first few items
+            print(f"Data type: {type(data)}, Length: {len(data)}")
+            if data and len(data) > 0:
+                print(f"First item ID: {data[0].get('id', 'NO_ID')}")
+                print(f"First item keys: {list(data[0].keys())[:10]}")
+            
+            # Remove duplicates from source data and validate IDs
+            unique_games = {}
+            skipped_no_id = 0
+            duplicates_found = 0
+            
+            for i, game in enumerate(data):
+                game_id = game.get('id')
                 
-                # Process in batches of 1000
-                if len(bulk_data) >= 2000:
-                    self.es.bulk(body=bulk_data)
-                    bulk_data = []
+                # Validate ID
+                if not game_id:
+                    skipped_no_id += 1
+                    print(f"Skipping game at index {i}: no ID found. Keys: {list(game.keys())[:5]}")
+                    continue
+                
+                # Convert to string for consistency
+                game_id_str = str(game_id)
+                
+                if game_id_str in unique_games:
+                    duplicates_found += 1
+                    print(f"Duplicate found: ID {game_id_str} ('{game.get('name', 'Unknown')}') at index {i}")
+                else:
+                    unique_games[game_id_str] = game
+            
+            logger.info(f"Processing: {len(unique_games)} unique games, {duplicates_found} duplicates removed, {skipped_no_id} skipped (no ID)")
+            
+            # Bulk indexing with game ID as document ID
+            bulk_data = []
+            indexed_count = 0
+            failed_count = 0
+            
+            for game_id, game in unique_games.items():
+                try:
+                    # Use game ID as Elasticsearch document ID to prevent duplicates
+                    bulk_data.append({
+                        "index": {
+                            "_index": self.index_name,
+                            "_id": game_id  # This ensures no duplicates at ES level
+                        }
+                    })
+                    bulk_data.append(game)
+                    indexed_count += 1
+                    
+                    # Process in batches of 1000 documents (500 games)
+                    if len(bulk_data) >= 1000:
+                        print(f"Indexing batch: {indexed_count - len(bulk_data)//2 + 1} to {indexed_count}")
+                        response = self.es.bulk(body=bulk_data)
+                        
+                        # Check for errors
+                        if response.get('errors'):
+                            for item in response['items']:
+                                if 'index' in item and item['index'].get('status', 200) >= 400:
+                                    failed_count += 1
+                                    print(f"Failed to index: {item['index'].get('error', 'Unknown error')}")
+                        
+                        bulk_data = []
+                
+                except Exception as e:
+                    print(f"Error preparing game {game_id}: {e}")
+                    failed_count += 1
+                    continue
             
             # Index remaining items
             if bulk_data:
-                self.es.bulk(body=bulk_data)
+                print(f"Indexing final batch: {indexed_count - len(bulk_data)//2 + 1} to {indexed_count}")
+                response = self.es.bulk(body=bulk_data)
                 
-            logger.info(f"Successfully indexed {len(data)} games into {self.index_name}")
+                # Check for errors
+                if response.get('errors'):
+                    for item in response['items']:
+                        if 'index' in item and item['index'].get('status', 200) >= 400:
+                            failed_count += 1
+                            print(f"Failed to index: {item['index'].get('error', 'Unknown error')}")
+            
+            # Refresh index to make documents searchable
+            self.es.indices.refresh(index=self.index_name)
+            
+            logger.info(f"Successfully indexed {indexed_count - failed_count} games into {self.index_name}")
+            if failed_count > 0:
+                logger.warning(f"{failed_count} documents failed to index")
+                
         except Exception as e:
             logger.error(f"Error indexing data: {e}")
+            raise
     
     def search(self, query_text, filters=None, size=10, from_=0):
         """
@@ -169,6 +240,8 @@ class ElasticsearchManager:
         - size: Number of results to return
         - from_: Offset for pagination
         """
+        print(f"Elasticsearch search called with: query='{query_text}', size={size}, from_={from_}")
+        
         # Map user-friendly filter names to actual Elasticsearch field paths
         field_mapping = {
             'creators': 'creator.name.keyword',
@@ -180,51 +253,53 @@ class ElasticsearchManager:
         }
         
         query = {
-                "query": {
-                    "function_score": {
-                        "query": {
-                            "bool": {
-                                "must": [
-                                    {
-                                        "multi_match": {
-                                            "query": query_text,
-                                            "fields": ["name^3", "description^2", "creator.name", "genre"],
-                                            "type": "best_fields",
-                                            "fuzziness": "AUTO"
-                                        }
+            "query": {
+                "function_score": {
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "multi_match": {
+                                        "query": query_text,
+                                        "fields": ["name^3", "description^2", "creator.name", "genre"],
+                                        "type": "best_fields",
+                                        "fuzziness": "AUTO"
                                     }
-                                ],
-                                "filter": []
-                            }
-                        },
-                        "functions": [
-                            {
-                                "field_value_factor": {
-                                    "field": "playing",
-                                    "factor": 0.05,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                },
-                                "weight": 0.8
+                                }
+                            ],
+                            "filter": []
+                        }
+                    },
+                    "functions": [
+                        {
+                            "field_value_factor": {
+                                "field": "playing",
+                                "factor": 0.05,
+                                "modifier": "log1p",
+                                "missing": 1
                             },
-                        ],
-                        "score_mode": "sum",
-                        "boost_mode": "multiply"
-                    }
-                },
-                "size": size,
-                "from": from_,
-                "highlight": {
-                    "fields": {
-                        "name": {},
-                        "description": {}
-                    }
+                            "weight": 0.8
+                        },
+                    ],
+                    "score_mode": "sum",
+                    "boost_mode": "multiply"
                 }
-            }
+            },
+            "size": size,
+            "from": from_,
+            "highlight": {
+                "fields": {
+                    "name": {},
+                    "description": {}
+                }
+            },
+            # Add track_total_hits to ensure we get accurate total count
+            "track_total_hits": True
+        }
             
-            # Add filters if provided
+        # Add filters if provided
         if filters:
-            print(filters)
+            print(f"Applying filters: {filters}")
             for field, value in filters.items():
                 # Handle max_players range filter specially
                 if field == 'max_players' and isinstance(value, str) and '-' in value:
@@ -253,7 +328,14 @@ class ElasticsearchManager:
                         query["query"]["function_score"]["query"]["bool"]["filter"].append({"term": {es_field: value}})
         
         try:
+            print(f"Elasticsearch query: {json.dumps(query, indent=2)}")
             results = self.es.search(index=self.index_name, body=query)
+            
+            # Log the results
+            total_hits = results.get("hits", {}).get("total", {}).get("value", 0)
+            returned_hits = len(results.get("hits", {}).get("hits", []))
+            print(f"Elasticsearch returned: {returned_hits} documents out of {total_hits} total matches")
+            
             return results
         except Exception as e:
             logger.error(f"Search error: {e}")
@@ -323,6 +405,107 @@ class ElasticsearchManager:
         except Exception as e:
             logger.error(f"Error fetching trending games: {e}")
             return {"error": str(e)}
+
+    def remove_duplicates(self):
+        """Remove duplicate documents based on game ID"""
+        try:
+            # First, get all unique IDs and their document IDs
+            query = {
+                "size": 0,
+                "aggs": {
+                    "unique_games": {
+                        "terms": {
+                            "field": "id",
+                            "size": 10000
+                        },
+                        "aggs": {
+                            "docs": {
+                                "top_hits": {
+                                    "size": 10,
+                                    "_source": False
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            result = self.es.search(index=self.index_name, body=query)
+            
+            delete_actions = []
+            kept_count = 0
+            deleted_count = 0
+            
+            for bucket in result['aggregations']['unique_games']['buckets']:
+                game_id = bucket['key']
+                docs = bucket['docs']['hits']['hits']
+                
+                # Keep the first document, mark others for deletion
+                if len(docs) > 1:
+                    for doc in docs[1:]:  # Skip first doc
+                        delete_actions.append({
+                            "delete": {
+                                "_index": self.index_name,
+                                "_id": doc['_id']
+                            }
+                        })
+                        deleted_count += 1
+                
+                kept_count += 1
+            
+            # Execute bulk delete
+            if delete_actions:
+                logger.info(f"Removing {deleted_count} duplicate documents...")
+                
+                # Process in batches
+                batch_size = 1000
+                for i in range(0, len(delete_actions), batch_size):
+                    batch = delete_actions[i:i + batch_size]
+                    self.es.bulk(body=batch)
+                
+                # Refresh index
+                self.es.indices.refresh(index=self.index_name)
+                
+                logger.info(f"Deduplication complete: kept {kept_count} unique games, removed {deleted_count} duplicates")
+                return True
+            else:
+                logger.info("No duplicates found in index")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error removing duplicates: {e}")
+            return False
+
+    def get_index_stats(self):
+        """Get basic statistics about the index"""
+        try:
+            stats = self.es.indices.stats(index=self.index_name)
+            doc_count = stats['indices'][self.index_name]['total']['docs']['count']
+            
+            # Get unique game count
+            query = {
+                "size": 0,
+                "aggs": {
+                    "unique_games": {
+                        "cardinality": {
+                            "field": "id"
+                        }
+                    }
+                }
+            }
+            
+            result = self.es.search(index=self.index_name, body=query)
+            unique_count = result['aggregations']['unique_games']['value']
+            
+            return {
+                "total_documents": doc_count,
+                "unique_games": unique_count,
+                "duplicates": doc_count - unique_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting index stats: {e}")
+            return None
 
 if __name__ == "__main__":
     # Test script
