@@ -10,6 +10,7 @@ import { searchGames } from "@/lib/search-action"
 import { CheckCircle2, Gamepad2, Search, Sparkles, Trophy } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
+import Link from "next/link"
 
 // Fetch aggregations function
 async function fetchAggregations() {
@@ -254,12 +255,17 @@ function HomeContent() {
           <div className="relative mb-2">
             <Sparkles className="absolute -left-10 -top-6 h-8 w-8 text-yellow-400 animate-pulse" />
             <Gamepad2 className="absolute -right-10 -top-6 h-8 w-8 text-pink-400 animate-pulse" />
-            <h1 className="text-5xl md:text-7xl font-extrabold mb-6 text-center fun-heading">Rofind</h1>
           </div>
 
-          <p className="text-lg text-neutral-800 font-medium mb-10 text-center max-w-2xl">
-            Discover amazing games and adventures in the Roblox universe!
-          </p>
+          <div className="text-center mb-12">
+            <Link href="/" className="inline-block hover:scale-105 transition-transform cursor-pointer">
+              <h1 className="text-5xl md:text-7xl font-extrabold mb-6 text-center fun-heading">Rofind</h1>
+            </Link>
+            <p className="text-xl text-purple-800 mb-8 max-w-2xl mx-auto">
+              Discover amazing Roblox games with our intelligent search engine. 
+              Find your next adventure in seconds!
+            </p>
+          </div>
 
           <div className="w-full max-w-3xl mb-12 floating">
             <SearchForm 
