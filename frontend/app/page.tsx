@@ -1,3 +1,5 @@
+"use client"
+
 import { Categories } from "@/components/categories"
 import { FeaturedGames } from "@/components/featured-games"
 import { Filters } from "@/components/filters"
@@ -6,12 +8,13 @@ import { Pagination } from "@/components/pagination"
 import { SearchForm } from "@/components/search-form"
 import { searchGames } from "@/lib/search-action"
 import { CheckCircle2, Gamepad2, Search, Sparkles, Trophy } from "lucide-react"
-import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
 
-// Add a new function to fetch aggregations
+// Fetch aggregations function
 async function fetchAggregations() {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; // Fallback for local dev if needed
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const response = await fetch(`${apiUrl}/api/aggregations`, {
       cache: "no-store",
     });
@@ -28,82 +31,152 @@ async function fetchAggregations() {
   }
 }
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ 
-    query?: string; 
-    page?: string; 
-    enhance?: string; 
-    genres?: string; // Combined genres
-    min_playing_now?: string; // Current players minimum
-    min_supported_players?: string; // Min supported players by game
-    max_supported_players?: string; // Max supported players by game
-  }>
-}) {
-  // Await searchParams before accessing its properties
-  const params = await searchParams;
+function HomeContent() {
+  const searchParams = useSearchParams();
   
-  const query = params.query || ""
-  const page = Number.parseInt(params.page || "1", 10)
-  const enhance = params.enhance === "true"
-  const displayPageSize = 11 // Items to show per page
-  const maxPages = 10 // Maximum pages to fetch from backend
+  // Parse URL parameters
+  const query = searchParams.get("query") || "";
+  const page = Number.parseInt(searchParams.get("page") || "1", 10);
+  const enhance = searchParams.get("enhance") === "true";
+  const displayPageSize = 11;
+  const maxPages = 10;
 
-  console.log(`Search with query: ${query}, page: ${page}, enhance: ${enhance}`)
-
-  // Parse new filter parameters
-  const genresParam = params.genres;
+  // Parse filter parameters
+  const genresParam = searchParams.get("genres");
   const genres = genresParam?.split(",").filter(g => g.trim() !== "") || [];
-  
-  const minPlayingNow = params.min_playing_now || "";
-  const minSupportedPlayers = params.min_supported_players || "";
-  const maxSupportedPlayers = params.max_supported_players || "";
+  const minPlayingNow = searchParams.get("min_playing_now") || "";
+  const minSupportedPlayers = searchParams.get("min_supported_players") || "";
+  const maxSupportedPlayers = searchParams.get("max_supported_players") || "";
 
-  console.log("Page params - Combined genres:", genres);
-  console.log("Page params - Min playing now:", minPlayingNow);
-  console.log("Page params - Min supported players:", minSupportedPlayers);
-  console.log("Page params - Max supported players:", maxSupportedPlayers);
+  // Check if we have any filters applied
+  const hasFilters = genres.length > 0 || minPlayingNow || minSupportedPlayers || maxSupportedPlayers;
 
-  // Fetch aggregations
-  const aggregations = await fetchAggregations();
+  // Show results if we have a query OR if we have filters applied
+  const shouldShowResults = query || hasFilters;
 
-  // Pass the enhance parameter and filters to the searchGames function
-  const { results, total, currentPage, totalPages, suggestions, llmAnalysis } = query
-    ? await searchGames(
-        query, 
-        displayPageSize, 
-        page, 
-        maxPages, 
-        enhance, 
-        { 
-          genres: genres,
-          minPlayingNow: minPlayingNow,
-          minSupportedPlayers: minSupportedPlayers,
-          maxSupportedPlayers: maxSupportedPlayers
-        }
-      )
-    : { results: [], total: 0, currentPage: 1, totalPages: 0, suggestions: [], llmAnalysis: null }
+  // State for search results
+  const [results, setResults] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [suggestions, setSuggestions] = useState([]);
+  const [llmAnalysis, setLlmAnalysis] = useState(null);
+  const [aggregations, setAggregations] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Add this helper function at the top of your renderLLMAnalysis function
+  // Debug logs
+  // useEffect(() => {
+  //   console.log("URL params changed:", {
+  //     query,
+  //     genres,
+  //     hasFilters,
+  //     shouldShowResults,
+  //     genresParam
+  //   });
+  // }, [query, genres, hasFilters, shouldShowResults, genresParam]);
+
+  // Fetch aggregations on mount
+  useEffect(() => {
+    fetchAggregations().then(setAggregations);
+  }, []);
+
+  // Alternative approach - separate effect for search
+  useEffect(() => {
+    console.log("=== useEffect search triggered ===");
+    console.log("shouldShowResults:", shouldShowResults);
+    console.log("query:", `"${query}"`);
+    console.log("genres:", genres);
+    console.log("hasFilters:", hasFilters);
+    
+    if (!shouldShowResults) {
+      console.log("Early return - shouldShowResults is false");
+      setResults([]);
+      setTotal(0);
+      setCurrentPage(1);
+      setTotalPages(0);
+      setSuggestions([]);
+      setLlmAnalysis(null);
+      setLoading(false);
+      return;
+    }
+
+    console.log("About to call performSearch");
+
+    const performSearch = async () => {
+      console.log("=== performSearch started ===");
+      setLoading(true);
+      console.log("Starting search with:", { query, genres });
+      
+      try {
+        console.log("Calling searchGames with params:", {
+          query: query || "",
+          displayPageSize,
+          page,
+          maxPages,
+          enhance,
+          filters: {
+            genres: genres,
+            minPlayingNow: minPlayingNow,
+            minSupportedPlayers: minSupportedPlayers,
+            maxSupportedPlayers: maxSupportedPlayers
+          }
+        });
+
+        const searchResults = await searchGames(
+          query || "",
+          displayPageSize,
+          page,
+          maxPages,
+          enhance,
+          {
+            genres: genres,
+            minPlayingNow: minPlayingNow,
+            minSupportedPlayers: minSupportedPlayers,
+            maxSupportedPlayers: maxSupportedPlayers
+          }
+        );
+        
+        console.log("Search completed:", searchResults);
+        setResults(searchResults.results);
+        setTotal(searchResults.total);
+        setCurrentPage(searchResults.currentPage);
+        setTotalPages(searchResults.totalPages);
+        setSuggestions(searchResults.suggestions);
+        setLlmAnalysis(searchResults.llmAnalysis);
+      } catch (error) {
+        console.error("Search error:", error);
+        setResults([]);
+        setTotal(0);
+        setCurrentPage(1);
+        setTotalPages(0);
+        setSuggestions([]);
+        setLlmAnalysis(null);
+      } finally {
+        console.log("performSearch finally block");
+        setLoading(false);
+      }
+    };
+
+    console.log("About to call performSearch()");
+    performSearch();
+    console.log("performSearch() called");
+  }, [shouldShowResults, query, JSON.stringify(genres), page, enhance, minPlayingNow, minSupportedPlayers, maxSupportedPlayers]);
+
+  // Helper functions (same as before)
   const safeRender = (content) => {
     if (content === null || content === undefined) return "";
     if (typeof content === 'object') return JSON.stringify(content);
     return content.toString();
   };
 
-  // Handle rendering the LLM analysis properly
   const renderLLMAnalysis = () => {
     if (!llmAnalysis) return null
     
-    // If llmAnalysis is a string, render it directly
     if (typeof llmAnalysis === "string") {
       return <p className="text-sm text-gray-300">{llmAnalysis}</p>
     }
 
-    // If it's an object with structured data, render it properly
     if (typeof llmAnalysis === "object") {
-      // Handle if the analysis is nested under an 'analysis' key
       const analysisData = llmAnalysis.analysis || llmAnalysis;
       
       return (
@@ -128,7 +201,6 @@ export default async function Home({
                 <ul className="list-disc pl-5 space-y-1">
                   {analysisData.features.map((feature, index) => (
                     <li key={index} className="text-sm text-white">
-                      {/* Check if feature is an object with name/description */}
                       {typeof feature === 'object' && feature.name ? (
                         <div>
                           <span className="font-medium">{safeRender(feature.name)}</span>
@@ -139,7 +211,6 @@ export default async function Home({
                           )}
                         </div>
                       ) : (
-                        /* Otherwise render as string */
                         safeRender(feature)
                       )}
                     </li>
@@ -161,11 +232,9 @@ export default async function Home({
       )
     }
 
-    // Fallback if we don't know what format it is
     return <p className="text-sm text-gray-300">Analysis available with AI enhancement.</p>
   }
 
-  // Extract alternative queries from llmAnalysis if available
   const extractAlternativeQueries = () => {
     if (!llmAnalysis) return [];
     
@@ -231,17 +300,34 @@ export default async function Home({
             </div>
           )}
 
-          {query ? (
-            // Search results view
+          {shouldShowResults ? (
             <div className="w-full mt-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                   <Search className="mr-2 h-6 w-6 text-pink-400" />
-                  {total > 0
-                    ? `${total} results for "${query}"`
-                    : `No results found for "${query}"`}
+                  {loading ? (
+                    "Searching..."
+                  ) : total > 0 ? (
+                    <>
+                      {query ? `${total} results for "${query}"` : `${total} games found`}
+                      {genres.length > 0 && (
+                        <span className="text-lg text-purple-300 ml-2">
+                          in {genres.join(", ")}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {query ? `No results found for "${query}"` : "No games found"}
+                      {genres.length > 0 && (
+                        <span className="text-lg text-purple-300 ml-2">
+                          in {genres.join(", ")}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </h2>
-                {total > 0 && (
+                {total > 0 && !loading && (
                   <span className="text-white bg-[#3a0099] px-4 py-1 rounded-full">
                     Page {currentPage} of {totalPages} • Showing {results.length} of {total} games
                   </span>
@@ -249,7 +335,6 @@ export default async function Home({
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Filters column */}
                 <div className="lg:col-span-1">
                   {aggregations && (
                     <Filters 
@@ -264,21 +349,23 @@ export default async function Home({
                   )}
                 </div>
                 
-                {/* Results column */}
                 <div className="lg:col-span-3">
-                  <Suspense fallback={<div className="text-center py-12">Loading results...</div>}>
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+                      <p className="mt-4 text-gray-400">Searching for games...</p>
+                    </div>
+                  ) : (
                     <GameResults results={results} />
-                  </Suspense>
+                  )}
 
-                  {/* Only show pagination if there are results and multiple pages */}
-                  {total > 0 && totalPages > 1 && (
+                  {total > 0 && totalPages > 1 && !loading && (
                     <Pagination currentPage={currentPage} maxPages={totalPages} />
                   )}
                 </div>
               </div>
             </div>
           ) : (
-            // Homepage view when no search is performed
             <div className="w-full">
               <FeaturedGames />
               <Categories />
@@ -287,5 +374,13 @@ export default async function Home({
         </div>
       </div>
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   )
 }

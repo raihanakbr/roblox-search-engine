@@ -50,12 +50,12 @@ interface SearchResponse {
 }> {
   try {
     // If no query, return empty results
-    if (!query || !query.trim()) {
-      return { results: [], total: 0, currentPage: 1, totalPages: 0 }
-    }
+    // if (!query || !query.trim()) {
+    //   return { results: [], total: 0, currentPage: 1, totalPages: 0 }
+    // }
 
     // Normalize query
-    const normalizedQuery = query.trim()
+    const normalizedQuery = query ? query.trim() : ""; // Ensure normalizedQuery is a string
     const validPage = Math.min(Math.max(1, page), maxPages)
 
     // Add timestamp to ensure fresh requests

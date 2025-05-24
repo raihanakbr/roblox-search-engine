@@ -150,6 +150,8 @@ export function Filters({ creators, playerRanges, genres, subgenres }: FiltersPr
   };
 
   const applyFilters = () => {
+    if (isFiltering) return; // Prevent multiple clicks
+    
     setIsFiltering(true);
 
     console.log("Applying new filters:");
@@ -199,7 +201,11 @@ export function Filters({ creators, playerRanges, genres, subgenres }: FiltersPr
     console.log("Navigating to URL:", url);
 
     router.push(url);
-    setTimeout(() => setIsFiltering(false), 500);
+    
+    // Reset button state after navigation
+    setTimeout(() => {
+      setIsFiltering(false);
+    }, 1000); // Increased timeout
   };
 
   const resetFilters = () => {
@@ -401,7 +407,7 @@ export function Filters({ creators, playerRanges, genres, subgenres }: FiltersPr
 
       <Button
         onClick={applyFilters}
-        className="w-full mt-4 bg-purple-600 hover:bg-purple-700"
+        className="w-full mt-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isFiltering}
       >
         {isFiltering ? "Applying..." : "Apply Filters"}

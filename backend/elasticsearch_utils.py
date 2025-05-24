@@ -244,10 +244,10 @@ class ElasticsearchManager:
         
         # Map user-friendly filter names to actual Elasticsearch field paths
         field_mapping = {
-            'genres': ['genre', 'genre_l1', 'genre_l2'],  # Search all three genre fields
-            'min_playing_now': 'playing', # Current players minimum (playing >= value)
-            'min_supported_players': 'maxPlayers', # Min supported players (maxPlayers >= value)
-            'max_supported_players': 'maxPlayers', # Max supported players (maxPlayers <= value)
+            'genres': ['genre', 'genre_l1', 'genre_l2'],
+            'min_playing_now': 'playing',
+            'min_supported_players': 'maxPlayers',
+            'max_supported_players': 'maxPlayers',
             # Legacy support
             'min_playing': 'playing',
             'max_players_limit': 'maxPlayers',
@@ -258,8 +258,12 @@ class ElasticsearchManager:
             'max_players': 'maxPlayers',
         }
         
-        query = {
-            "query": {
+        # Determine if this is a text search or filter-only search
+        has_query_text = query_text and query_text.strip() and query_text != "*"
+        
+        if has_query_text:
+            # Text search with filters
+            base_query = {
                 "function_score": {
                     "query": {
                         "bool": {
@@ -290,7 +294,37 @@ class ElasticsearchManager:
                     "score_mode": "sum",
                     "boost_mode": "multiply"
                 }
-            },
+            }
+        else:
+            # Filter-only search (no text query)
+            base_query = {
+                "function_score": {
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {"match_all": {}}  # Match all documents
+                            ],
+                            "filter": []
+                        }
+                    },
+                    "functions": [
+                        {
+                            "field_value_factor": {
+                                "field": "playing",
+                                "factor": 0.05,
+                                "modifier": "log1p",
+                                "missing": 1
+                            },
+                            "weight": 0.8
+                        },
+                    ],
+                    "score_mode": "sum",
+                    "boost_mode": "multiply"
+                }
+            }
+
+        query = {
+            "query": base_query,
             "size": size,
             "from": from_,
             "highlight": {
@@ -298,8 +332,7 @@ class ElasticsearchManager:
                     "name": {},
                     "description": {}
                 }
-            },
-            # Add track_total_hits to ensure we get accurate total count
+            } if has_query_text else {},  # Only highlight for text searches
             "track_total_hits": True
         }
             
@@ -584,7 +617,7 @@ if __name__ == "__main__":
     es_manager = ElasticsearchManager()
     if es_manager.check_connection():
         es_manager.create_index()
-        es_manager.index_data("../data/roblox_data.json")
+        es_manager.index_data("./data/roblox_data.json")
         
         # Test search
         test_results = es_manager.search("gorilla")

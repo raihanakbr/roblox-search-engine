@@ -377,6 +377,68 @@ async def debug_sample_genres(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
+@app.get("/api/search")
+async def search_games(
+    q: str = Query("", description="Search query"),
+    size: int = Query(10, description="Number of results"),
+    from_: int = Query(0, alias="from", description="Offset for pagination"),
+    enhance: bool = Query(False, description="Enable LLM enhancement"),
+    genres: str = Query("", description="Comma-separated list of genres"),
+    min_playing_now: str = Query("", description="Minimum current players"),
+    min_supported_players: str = Query("", description="Minimum supported players"),
+    max_supported_players: str = Query("", description="Maximum supported players"),
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Search for Roblox games with optional filters"""
+    
+    # Debug logging
+    logger.info(f"Search API called with:")
+    logger.info(f"  q: '{q}'")
+    logger.info(f"  genres: '{genres}'")
+    logger.info(f"  size: {size}, from: {from_}")
+    logger.info(f"  min_playing_now: '{min_playing_now}'")
+    logger.info(f"  min_supported_players: '{min_supported_players}'")
+    logger.info(f"  max_supported_players: '{max_supported_players}'")
+    
+    try:
+        # Parse filters
+        filters = {}
+        
+        if genres:
+            genre_list = [g.strip() for g in genres.split(",") if g.strip()]
+            if genre_list:
+                filters["genres"] = genre_list
+                logger.info(f"  Parsed genres: {genre_list}")
+        
+        if min_playing_now:
+            filters["min_playing_now"] = min_playing_now
+            
+        if min_supported_players:
+            filters["min_supported_players"] = min_supported_players
+            
+        if max_supported_players:
+            filters["max_supported_players"] = max_supported_players
+        
+        logger.info(f"  Final filters: {filters}")
+        
+        # Perform search
+        search_results = es.search(q, filters=filters, size=size, from_=from_)
+        
+        # Debug the search results
+        logger.info(f"Search results type: {type(search_results)}")
+        if isinstance(search_results, dict):
+            total_hits = search_results.get("hits", {}).get("total", {}).get("value", 0)
+            returned_hits = len(search_results.get("hits", {}).get("hits", []))
+            logger.info(f"Total hits: {total_hits}, Returned: {returned_hits}")
+        
+        # Rest of your existing search logic...
+        # ...
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
 
