@@ -342,19 +342,26 @@ class ElasticsearchManager:
             for field, value in filters.items():
                 
                 # Handle combined genres filter
-                if field == 'genres' and isinstance(value, list):
-                    # Create OR query for genre, genre_l1 and genre_l2
-                    genre_queries = []
-                    for genre in value:
-                        genre_queries.extend([
-                            {"term": {"genre": genre}},
-                            {"term": {"genre_l1": genre}},
-                            {"term": {"genre_l2": genre}}
-                        ])
-                    
-                    if genre_queries:
+                if field == 'genres' and isinstance(value, list) and value: # Pastikan value tidak kosong
+                    # Untuk setiap genre yang dipilih, buat kondisi OR di antara field genre, genre_l1, dan genre_l2.
+                    # Kemudian, gabungkan kondisi-kondisi ini dengan AND.
+                    for selected_genre_value in value: # Iterasi melalui setiap genre yang dipilih pengguna
+                        if not selected_genre_value.strip(): # Lewati string genre kosong
+                            continue
+
+                        # Buat query OR untuk genre_value spesifik ini di field genre, genre_l1, dan genre_l2
+                        per_genre_or_queries = [
+                            {"term": {"genre": selected_genre_value}},
+                            {"term": {"genre_l1": selected_genre_value}},
+                            {"term": {"genre_l2": selected_genre_value}}
+                        ]
+                        
+                        # Tambahkan blok OR ini ke filter utama (yang berfungsi sebagai AND)
                         query["query"]["function_score"]["query"]["bool"]["filter"].append({
-                            "bool": {"should": genre_queries, "minimum_should_match": 1}
+                            "bool": {
+                                "should": per_genre_or_queries,
+                                "minimum_should_match": 1 # Harus cocok setidaknya satu dari field genre/genre_l1/genre_l2
+                            }
                         })
                 
                 # Handle min_playing_now filter (current players)
