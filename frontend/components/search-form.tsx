@@ -1,10 +1,10 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import { Search, Sparkles, Zap } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -116,7 +116,7 @@ export function SearchForm({ initialQuery, initialPage, initialSuggestions }: Se
               placeholder="Search for games..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="bg-[#3a0099]/50 border-[#4f00b3] text-white placeholder-purple-300 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-none transition-all duration-200 h-12 text-lg"
+              className="bg-[#3a0099]/50 border-[#4f00b3] text-white placeholder-gray-800 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-none transition-all duration-200 h-12 text-lg"
             />
           </div>
           

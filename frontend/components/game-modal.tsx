@@ -102,16 +102,18 @@ export function GameModal({ game, isOpen, onClose }: GameModalProps) {
               className="text-3xl font-extrabold text-white mb-2"
               dangerouslySetInnerHTML={{ __html: game.formattedName || game.name }}
             />
-            <DialogDescription className="text-purple-200 flex items-center">
-              By{" "}
-              <span className="font-medium text-white ml-1">
-                {game.creator?.name || (typeof game.creator === "string" ? game.creator : "Unknown")}
-              </span>
-              {game.creator?.hasVerifiedBadge && (
-                <Badge className="ml-1 bg-[#00b3ff] text-white h-5 w-5 flex items-center justify-center p-0 rounded-full">
-                  ✓
-                </Badge>
-              )}
+            <DialogDescription asChild>
+              <div className="text-purple-200 flex items-center">
+                By{" "}
+                <span className="font-medium text-white ml-1">
+                  {game.creator?.name || (typeof game.creator === "string" ? game.creator : "Unknown")}
+                </span>
+                {game.creator?.hasVerifiedBadge && (
+                  <Badge className="ml-1 bg-[#00b3ff] text-white h-5 w-5 flex items-center justify-center p-0 rounded-full">
+                    ✓
+                  </Badge>
+                )}
+              </div>
             </DialogDescription>
           </div>
         </div>
