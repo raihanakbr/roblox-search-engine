@@ -28,18 +28,17 @@ interface SearchResponse {
   }
 }
 
-// Update the function signature to include genre_l1 and genre_l2 in filters
-export async function searchGames(
+  export async function searchGames(
   query: string,
   pageSize = 21,
   page = 1,
   maxPages = 10,
   useLLM = false,
   filters?: { 
-    creators?: string[]; 
-    playerRange?: string;
-    genre_l1?: string[];
-    genre_l2?: string[];
+    genres?: string[];
+    minPlayingNow?: string;
+    minSupportedPlayers?: string;
+    maxSupportedPlayers?: string;
   }
 ): Promise<{ 
   results: Game[]; 
@@ -51,12 +50,17 @@ export async function searchGames(
 }> {
   try {
     // If no query, return empty results
-    if (!query.trim()) {
+    if (!query || !query.trim()) {
       return { results: [], total: 0, currentPage: 1, totalPages: 0 }
     }
 
-    // Ensure page is within bounds
+    // Normalize query
+    const normalizedQuery = query.trim()
     const validPage = Math.min(Math.max(1, page), maxPages)
+
+    // Add timestamp to ensure fresh requests
+    const timestamp = Date.now()
+    console.log(`[${timestamp}] Searching with query: "${normalizedQuery}", LLM: ${useLLM ? 'YES' : 'NO'}, page: ${validPage}`);
 
     // Set up timeout for LLM-enhanced searches
     const controller = new AbortController();
@@ -64,36 +68,32 @@ export async function searchGames(
       setTimeout(() => controller.abort(), 15000) : 
       null;
 
-    console.log(`Searching with LLM enhancement: ${useLLM ? 'YES' : 'NO'}`);
-    console.log(`Strategy: Fetch all data first, then paginate locally with pageSize=${pageSize}`);
-    console.log(`Applying filters:`, filters);
-
-    // Always fetch 110 items first to get all available data
     const requestBody: any = {
-      query: query,
-      page_size: 110, // Always fetch maximum available data
-      page: 1, // Always start from page 1
+      query: normalizedQuery,
+      page_size: 110,
+      page: 1,
       use_llm: useLLM,
+      timestamp: timestamp // Add timestamp to request body
     };
     
     // Add filters if they exist
     if (filters) {
       requestBody.filters = {};
       
-      if (filters.creators && filters.creators.length > 0) {
-        requestBody.filters.creators = filters.creators;
+      if (filters.genres && filters.genres.length > 0) {
+        requestBody.filters.genres = filters.genres;
       }
       
-      if (filters.genre_l1 && filters.genre_l1.length > 0) {
-        requestBody.filters.genre_l1 = filters.genre_l1;
+      if (filters.minPlayingNow) {
+        requestBody.filters.min_playing_now = filters.minPlayingNow;
       }
       
-      if (filters.genre_l2 && filters.genre_l2.length > 0) {
-        requestBody.filters.genre_l2 = filters.genre_l2;
+      if (filters.minSupportedPlayers) {
+        requestBody.filters.min_supported_players = filters.minSupportedPlayers;
       }
-      
-      if (filters.playerRange) {
-        requestBody.filters.max_players = filters.playerRange;
+
+      if (filters.maxSupportedPlayers) {
+        requestBody.filters.max_supported_players = filters.maxSupportedPlayers;
       }
     }
 
@@ -103,9 +103,11 @@ export async function searchGames(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Cache-Control": "no-cache", // Prevent caching
+        "Pragma": "no-cache"
       },
       body: JSON.stringify(requestBody),
-      cache: "no-store",
+      cache: "no-store", // Ensure no caching
       signal: useLLM ? controller.signal : undefined
     })
 
@@ -119,15 +121,21 @@ export async function searchGames(
 
     const data: SearchResponse = await response.json()
     
-    console.log("Search response received, total from API:", data.hits.total.value);
-    console.log("Actual results returned:", data.hits.hits.length);
+    // Handle potential API errors
+    if (!data.hits) {
+      console.error("Invalid API response format:", data)
+      return { results: [], total: 0, currentPage: validPage, totalPages: 0 }
+    }
+    
+    console.log(`[${timestamp}] Search response received, total from API:`, data.hits.total?.value || 0);
+    console.log(`[${timestamp}] Actual results returned:`, data.hits.hits?.length || 0);
     
     // Extract LLM enhancements if available
     const suggestions = data.llm_enhancements?.alternative_queries || []
     const llmAnalysis = data.llm_enhancements?.analysis
 
     // Transform ALL results to our Game type
-    const allResults = data.hits.hits.map((hit) => {
+    const allResults = (data.hits.hits || []).map((hit) => {
       const source = hit._source
 
       // Get highlighted name if available
@@ -162,8 +170,8 @@ export async function searchGames(
     })
 
     // Calculate real pagination based on actual results
-    const totalResults = allResults.length; // Use actual results count
-    const itemsPerPage = 11; // Fixed items per page for display
+    const totalResults = allResults.length;
+    const itemsPerPage = 11;
     const actualTotalPages = Math.ceil(totalResults / itemsPerPage);
     const clampedCurrentPage = Math.min(validPage, actualTotalPages || 1);
     
@@ -172,18 +180,13 @@ export async function searchGames(
     const endIndex = startIndex + itemsPerPage;
     const paginatedResults = allResults.slice(startIndex, endIndex);
 
-    console.log(`Pagination calculation:`);
-    console.log(`- Total results available: ${totalResults}`);
-    console.log(`- Items per page: ${itemsPerPage}`);
-    console.log(`- Total pages needed: ${actualTotalPages}`);
-    console.log(`- Current page: ${clampedCurrentPage}`);
-    console.log(`- Showing results ${startIndex + 1}-${Math.min(endIndex, totalResults)} of ${totalResults}`);
+    console.log(`[${timestamp}] Pagination calculation: ${totalResults} total, page ${clampedCurrentPage}/${actualTotalPages}, showing ${paginatedResults.length} results`);
 
     return {
       results: paginatedResults,
-      total: totalResults, // Use actual available results
+      total: totalResults,
       currentPage: clampedCurrentPage,
-      totalPages: actualTotalPages, // Use calculated pages based on actual data
+      totalPages: actualTotalPages,
       suggestions,
       llmAnalysis,
     }

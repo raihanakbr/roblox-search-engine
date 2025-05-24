@@ -1,13 +1,13 @@
 "use client"
 
-import Image from "next/image"
-import { ThumbsUp, Users, Gamepad, Flame } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import type { Game } from "@/lib/types"
+import { Flame, Gamepad, ThumbsUp, Users } from "lucide-react"
+import Image from "next/image"
 import { useState } from "react"
 import { GameModal } from "./game-modal"
-import type { Game } from "@/lib/types"
 
 interface GameResultsProps {
   results: Game[]
@@ -29,10 +29,11 @@ export function GameResults({ results }: GameResultsProps) {
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {results.map((game, index) => {
-          // Determine genres to display
+          // Determine genres to display - prioritize main genre field
           const genresToShow = []
-          if (game.genre_l1) genresToShow.push(game.genre_l1)
-          if (game.genre_l2 && game.genre_l2 !== game.genre_l1) genresToShow.push(game.genre_l2)
+          if (game.genre) genresToShow.push(game.genre)
+          if (game.genre_l1 && game.genre_l1 !== game.genre) genresToShow.push(game.genre_l1)
+          if (game.genre_l2 && game.genre_l2 !== game.genre && game.genre_l2 !== game.genre_l1) genresToShow.push(game.genre_l2)
           if (genresToShow.length === 0 && game.genres) genresToShow.push(...game.genres)
 
           // Use imageUrl if available, otherwise fall back to thumbnail or placeholder

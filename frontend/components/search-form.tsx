@@ -1,91 +1,142 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Search, Zap, Sparkles, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Search, Sparkles, Zap } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
 
 interface SearchFormProps {
   initialQuery: string
   initialPage: number
+  initialSuggestions?: string[]
 }
 
-export function SearchForm({ initialQuery, initialPage }: SearchFormProps) {
+export function SearchForm({ initialQuery, initialPage, initialSuggestions }: SearchFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(initialQuery)
   const [isLoading, setIsLoading] = useState(false)
   const [useLLM, setUseLLM] = useState(searchParams?.get("enhance") === "true")
-  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [suggestions, setSuggestions] = useState<string[]>(initialSuggestions || [])
 
+  // Update query when initialQuery changes
   useEffect(() => {
-    // Get query suggestions from search results if available
-    const suggestionsData = localStorage.getItem("querysuggestions")
-    if (suggestionsData) {
-      try {
-        setSuggestions(JSON.parse(suggestionsData))
-      } catch (e) {
-        console.error("Failed to parse suggestions", e)
-      }
-    }
-  }, [])
+    setQuery(initialQuery)
+  }, [initialQuery])
 
-  // Add this effect to reset loading state when URL changes
+  // Update suggestions when initialSuggestions changes
   useEffect(() => {
-    // This will capture when navigation is complete
+    setSuggestions(initialSuggestions || [])
+  }, [initialSuggestions])
+
+  // Reset loading state when URL changes
+  useEffect(() => {
     setIsLoading(false)
   }, [searchParams])
 
+  // Also reset loading after a timeout as fallback
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        setIsLoading(false)
+      }, 10000)
+      return () => clearTimeout(timeout)
+    }
+  }, [isLoading])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true) // Set loading to true
+    
+    // Only proceed if query is not empty
+    if (!query.trim()) return
+    
+    setIsLoading(true)
 
-    const params = new URLSearchParams()
-    if (query) params.set("query", query)
-    params.set("page", "1") // Reset to page 1 on new search
-    if (useLLM) params.set("enhance", "true")
+    const params = new URLSearchParams(searchParams?.toString() || "")
+    const currentQuery = params.get("query")
+    const currentEnhance = params.get("enhance")
+    
+    params.set("query", query.trim())
+    params.set("page", "1")
+    
+    if (useLLM) {
+      params.set("enhance", "true")
+    } else {
+      params.delete("enhance")
+    }
 
-    router.push(`/?${params.toString()}`)
-    // Don't reset isLoading here - it will be reset by the useEffect when navigation completes
+    const newUrl = `/?${params.toString()}`
+    const currentUrl = `/?${searchParams?.toString() || ""}`
+    
+    console.log("Current URL:", currentUrl)
+    console.log("New URL:", newUrl)
+    
+    // Check if URL will be the same
+    if (newUrl === currentUrl || 
+        (query.trim() === currentQuery && 
+         (useLLM ? "true" : null) === currentEnhance)) {
+      console.log("Same URL detected, forcing refresh")
+      // Force a page refresh for the same URL
+      window.location.href = newUrl
+    } else {
+      console.log("Different URL, using router.push")
+      router.push(newUrl)
+    }
   }
 
   const handleSuggestionClick = (suggestion: string) => {
     setQuery(suggestion)
-    setIsLoading(true) // Set loading to true
+    setIsLoading(true)
     
-    const params = new URLSearchParams()
+    const params = new URLSearchParams(searchParams?.toString() || "")
     params.set("query", suggestion)
     params.set("page", "1")
-    if (useLLM) params.set("enhance", "true")
     
-    router.push(`/?${params.toString()}`)
-    // Don't reset isLoading here either
+    if (useLLM) {
+      params.set("enhance", "true")
+    } else {
+      params.delete("enhance")
+    }
+    
+    const newUrl = `/?${params.toString()}`
+    router.push(newUrl)
   }
 
   return (
     <div className="w-full space-y-4">
       <form onSubmit={handleSubmit} className="w-full">
         <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
+          <div className="flex-1">
             <Input
               type="text"
-              placeholder="Find your next adventure..."
+              placeholder="Search for games..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="bg-[#2a0066] border-[#4f00b3] h-14 pl-12 pr-4 text-white rounded-xl text-lg"
+              className="bg-[#3a0099]/50 border-[#4f00b3] text-white placeholder-purple-300 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-none transition-all duration-200 h-12 text-lg"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-300 h-6 w-6" />
           </div>
-
-          <Button type="submit" className="fun-button h-14 px-8 rounded-xl text-lg font-bold" disabled={isLoading}>
-            <Zap className="h-5 w-5 mr-2" />
-            {isLoading ? "Searching..." : "Search"}
+          
+          <Button 
+            type="submit" 
+            size="lg" 
+            disabled={isLoading || !query.trim()}
+            className="fun-button text-white font-bold px-8 h-12 hover:scale-105 transition-transform"
+          >
+            {isLoading ? (
+              <>
+                <Zap className="mr-2 h-5 w-5 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-5 w-5" />
+                Search
+              </>
+            )}
           </Button>
         </div>
 
@@ -107,14 +158,13 @@ export function SearchForm({ initialQuery, initialPage }: SearchFormProps) {
           <p className="text-sm text-gray-400 mb-2">Related searches:</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((suggestion, index) => (
-              <Badge 
-                key={index} 
-                variant="outline" 
-                className="cursor-pointer hover:bg-purple-900 transition-colors py-1.5"
+              <Badge
+                key={index}
+                variant="outline"
+                className="cursor-pointer hover:bg-purple-700 text-purple-300 border-purple-500"
                 onClick={() => handleSuggestionClick(suggestion)}
               >
                 {suggestion}
-                <ArrowRight className="h-3 w-3 ml-1" />
               </Badge>
             ))}
           </div>

@@ -31,38 +31,39 @@ async function fetchAggregations() {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: { 
+  searchParams: Promise<{ 
     query?: string; 
     page?: string; 
     enhance?: string; 
-    creators?: string; 
-    players?: string;
-    genre_l1?: string;
-    genre_l2?: string;
-  }
+    genres?: string; // Combined genres
+    min_playing_now?: string; // Current players minimum
+    min_supported_players?: string; // Min supported players by game
+    max_supported_players?: string; // Max supported players by game
+  }>
 }) {
-  const query = searchParams.query || ""
-  const page = Number.parseInt(searchParams.page || "1", 10)
-  const enhance = searchParams.enhance === "true"
+  // Await searchParams before accessing its properties
+  const params = await searchParams;
+  
+  const query = params.query || ""
+  const page = Number.parseInt(params.page || "1", 10)
+  const enhance = params.enhance === "true"
   const displayPageSize = 11 // Items to show per page
   const maxPages = 10 // Maximum pages to fetch from backend
 
   console.log(`Search with query: ${query}, page: ${page}, enhance: ${enhance}`)
 
-  // Parse creators from URL parameters
-  const creatorsParam = searchParams.creators;
-  const creators = creatorsParam?.split(",").filter(c => c.trim() !== "") || [];
-
-  console.log("Extracted creators from URL:", creators);
-
-  // Parse genres from URL parameters - now using genre_l1 and genre_l2
-  const genresL1Param = searchParams.genre_l1;
-  const genresL1 = genresL1Param?.split(",").filter(g => g.trim() !== "") || [];
+  // Parse new filter parameters
+  const genresParam = params.genres;
+  const genres = genresParam?.split(",").filter(g => g.trim() !== "") || [];
   
-  const genresL2Param = searchParams.genre_l2;
-  const genresL2 = genresL2Param?.split(",").filter(g => g.trim() !== "") || [];
+  const minPlayingNow = params.min_playing_now || "";
+  const minSupportedPlayers = params.min_supported_players || "";
+  const maxSupportedPlayers = params.max_supported_players || "";
 
-  const playerRange = searchParams.players || "";
+  console.log("Page params - Combined genres:", genres);
+  console.log("Page params - Min playing now:", minPlayingNow);
+  console.log("Page params - Min supported players:", minSupportedPlayers);
+  console.log("Page params - Max supported players:", maxSupportedPlayers);
 
   // Fetch aggregations
   const aggregations = await fetchAggregations();
@@ -76,10 +77,10 @@ export default async function Home({
         maxPages, 
         enhance, 
         { 
-          creators: creators, 
-          genre_l1: genresL1,
-          genre_l2: genresL2,
-          playerRange: playerRange 
+          genres: genres,
+          minPlayingNow: minPlayingNow,
+          minSupportedPlayers: minSupportedPlayers,
+          maxSupportedPlayers: maxSupportedPlayers
         }
       )
     : { results: [], total: 0, currentPage: 1, totalPages: 0, suggestions: [], llmAnalysis: null }
@@ -252,10 +253,13 @@ export default async function Home({
                 <div className="lg:col-span-1">
                   {aggregations && (
                     <Filters 
-                      creators={aggregations.creators.buckets} 
-                      playerRanges={aggregations.max_players.buckets}
-                      genres={aggregations.genre_l1.buckets}
-                      subgenres={aggregations.genre_l2.buckets}
+                      creators={aggregations.creators?.buckets || []} 
+                      playerRanges={aggregations.max_players?.buckets || []}
+                      genres={[
+                        ...(aggregations.genre?.buckets || []), 
+                        ...(aggregations.genre_l1?.buckets || [])
+                      ]}
+                      subgenres={aggregations.genre_l2?.buckets || []}
                     />
                   )}
                 </div>
