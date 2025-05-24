@@ -344,6 +344,39 @@ async def clean_reindex(
         logger.error(f"Error during clean reindex: {e}")
         raise HTTPException(status_code=500, detail=f"Clean reindex failed: {str(e)}")
 
+@app.get("/api/debug/sample-genres")
+async def debug_sample_genres(
+    admin_key: str,
+    es: ElasticsearchManager = Depends(get_es_manager)
+):
+    """Debug endpoint to see sample genre data (admin only)"""
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key")
+    
+    query = {
+        "size": 10,
+        "_source": ["id", "name", "genre", "genre_l1", "genre_l2"],
+        "query": {"match_all": {}}
+    }
+    
+    try:
+        results = es.es.search(index=es.index_name, body=query)
+        sample_data = []
+        
+        for hit in results["hits"]["hits"]:
+            source = hit["_source"]
+            sample_data.append({
+                "id": source.get("id"),
+                "name": source.get("name"),
+                "genre": source.get("genre"),
+                "genre_l1": source.get("genre_l1"), 
+                "genre_l2": source.get("genre_l2")
+            })
+        
+        return {"sample_data": sample_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
 

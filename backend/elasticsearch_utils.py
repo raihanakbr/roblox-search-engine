@@ -244,12 +244,18 @@ class ElasticsearchManager:
         
         # Map user-friendly filter names to actual Elasticsearch field paths
         field_mapping = {
+            'genres': ['genre', 'genre_l1', 'genre_l2'],  # Search all three genre fields
+            'min_playing_now': 'playing', # Current players minimum (playing >= value)
+            'min_supported_players': 'maxPlayers', # Min supported players (maxPlayers >= value)
+            'max_supported_players': 'maxPlayers', # Max supported players (maxPlayers <= value)
+            # Legacy support
+            'min_playing': 'playing',
+            'max_players_limit': 'maxPlayers',
             'creators': 'creator.name.keyword',
-            'genre': 'genre.keyword',
             'genre_l1': 'genre_l1',
             'genre_l2': 'genre_l2',
             'maxPlayers': 'maxPlayers',
-            # Add other mappings as needed
+            'max_players': 'maxPlayers',
         }
         
         query = {
@@ -261,7 +267,7 @@ class ElasticsearchManager:
                                 {
                                     "multi_match": {
                                         "query": query_text,
-                                        "fields": ["name^3", "description^2", "creator.name", "genre"],
+                                        "fields": ["name^3", "description^2", "creator.name", "genre^1.5", "genre_l1^1.5", "genre_l2^1.5"],
                                         "type": "best_fields",
                                         "fuzziness": "AUTO"
                                     }
@@ -301,32 +307,95 @@ class ElasticsearchManager:
         if filters:
             print(f"Applying filters: {filters}")
             for field, value in filters.items():
-                # Handle max_players range filter specially
-                if field == 'max_players' and isinstance(value, str) and '-' in value:
+                
+                # Handle combined genres filter
+                if field == 'genres' and isinstance(value, list):
+                    # Create OR query for genre, genre_l1 and genre_l2
+                    genre_queries = []
+                    for genre in value:
+                        genre_queries.extend([
+                            {"term": {"genre": genre}},
+                            {"term": {"genre_l1": genre}},
+                            {"term": {"genre_l2": genre}}
+                        ])
+                    
+                    if genre_queries:
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "bool": {"should": genre_queries, "minimum_should_match": 1}
+                        })
+                
+                # Handle min_playing_now filter (current players)
+                elif field == 'min_playing_now' and value:
                     try:
-                        min_val, max_val = value.split('-')
-                        range_query = {"range": {"maxPlayers": {}}}
-                        
-                        if min_val and min_val != '*':
-                            range_query["range"]["maxPlayers"]["gte"] = float(min_val)
-                        
-                        # Only add upper bound if max_val is not an asterisk
-                        if max_val and max_val != '*':
-                            range_query["range"]["maxPlayers"]["lte"] = float(max_val)
-                        
-                        query["query"]["function_score"]["query"]["bool"]["filter"].append(range_query)
-                    except Exception as e:
-                        logger.error(f"Error parsing max_players range: {e}")
+                        min_val = int(value)
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "range": {"playing": {"gte": min_val}}
+                        })
+                    except ValueError:
+                        logger.error(f"Invalid min_playing_now value: {value}")
                         continue
+                
+                # Handle min_supported_players filter (game's max player capacity)
+                elif field == 'min_supported_players' and value:
+                    try:
+                        min_val = int(value)
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "range": {"maxPlayers": {"gte": min_val}}
+                        })
+                    except ValueError:
+                        logger.error(f"Invalid min_supported_players value: {value}")
+                        continue
+
+                # Handle max_supported_players filter (game's max player capacity)
+                elif field == 'max_supported_players' and value:
+                    try:
+                        max_val = int(value)
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "range": {"maxPlayers": {"lte": max_val}}
+                        })
+                    except ValueError:
+                        logger.error(f"Invalid max_supported_players value: {value}")
+                        continue
+                
+                # Handle legacy filters for backward compatibility
+                elif field == 'min_playing' and value:
+                    try:
+                        min_val = int(value)
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "range": {"playing": {"gte": min_val}}
+                        })
+                    except ValueError:
+                        logger.error(f"Invalid min_playing value: {value}")
+                        continue
+                
+                elif field == 'max_players_limit' and value:
+                    try:
+                        max_val = int(value)
+                        query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                            "range": {"maxPlayers": {"lte": max_val}}
+                        })
+                    except ValueError:
+                        logger.error(f"Invalid max_players_limit value: {value}")
+                        continue
+                
+                # Handle other filters (legacy support)
                 else:
-                    # Map the field name if needed
                     es_field = field_mapping.get(field, field)
                     
                     if isinstance(value, list):
-                        query["query"]["function_score"]["query"]["bool"]["filter"].append({"terms": {es_field: value}})
+                        if isinstance(es_field, list):
+                            # Multiple fields (like genres)
+                            field_queries = []
+                            for ef in es_field:
+                                field_queries.append({"terms": {ef: value}})
+                            query["query"]["function_score"]["query"]["bool"]["filter"].append({
+                                "bool": {"should": field_queries, "minimum_should_match": 1}
+                            })
+                        else:
+                            query["query"]["function_score"]["query"]["bool"]["filter"].append({"terms": {es_field: value}})
                     else:
                         query["query"]["function_score"]["query"]["bool"]["filter"].append({"term": {es_field: value}})
-        
+
         try:
             print(f"Elasticsearch query: {json.dumps(query, indent=2)}")
             results = self.es.search(index=self.index_name, body=query)
@@ -346,6 +415,9 @@ class ElasticsearchManager:
         query = {
             "size": 0,
             "aggs": {
+                "genre": {
+                    "terms": {"field": "genre", "size": 20}
+                },
                 "genre_l1": {
                     "terms": {"field": "genre_l1", "size": 20}
                 },
